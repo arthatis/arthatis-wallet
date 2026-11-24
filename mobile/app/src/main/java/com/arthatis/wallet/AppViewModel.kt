@@ -71,6 +71,9 @@ sealed interface Route {
     data object AiSettings : Route
     data object Budgets : Route
     data object LinkWeb : Route
+    data object Report : Route
+    data object EmailSync : Route
+    data object EmailDrafts : Route
 }
 
 data class Settings(
@@ -319,7 +322,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _thinking.value = true
             val currency = ledger.value.profile?.primaryCurrency ?: "IDR"
-            val reply = graph.chat.reply(text, ledger.value, rates.value, currency, prefs.language)
+            // Earlier turns (not drafts or status markers) so the engine can follow the conversation.
+            val history = _chat.value.dropLast(1).filter { it.draft == null && it.text !in setOf("UNKNOWN", "SAVED", "") }
+                .map { com.arthatis.wallet.ai.ChatEngine.Turn(if (it.fromUser) "user" else "assistant", it.text) }
+            val reply = graph.chat.reply(text, ledger.value, rates.value, currency, prefs.language, history)
             _thinking.value = false
             _chat.update {
                 it + when (reply) {
@@ -331,14 +337,117 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun confirmDraft(draft: ChatDraft, walletId: String?) {
+    fun confirmDraft(draft: ChatDraft, walletId: String?, toWalletId: String? = draft.toWalletId) {
         viewModelScope.launch {
             val id = walletId ?: draft.walletId ?: ledger.value.liveWallets.firstOrNull()?.id ?: return@launch
-            repo.saveTx(Tx(newId(), id, draft.toWalletId, draft.categoryId, draft.kind, draft.amountMinor, note = draft.note, occurredAt = System.currentTimeMillis(), updatedAt = 0))
+            if (draft.kind == EntryKind.transfer) {
+                // Through buildTransfer, so the destination amount and the rate are right across currencies.
+                val from = ledger.value.wallet(id) ?: return@launch
+                val to = toWalletId?.let { ledger.value.wallet(it) } ?: return@launch
+                if (!transfer(from, to, draft.amountMinor, null, draft.note)) {
+                    say(t("Kurs belum tersedia. Isi kurs manual di layar Transfer.", "Rate unavailable. Enter a manual rate on the Transfer screen."))
+                    go(Route.Transfer(from.id)); return@launch
+                }
+            } else {
+                repo.saveTx(Tx(newId(), id, null, draft.categoryId, draft.kind, draft.amountMinor, note = draft.note, occurredAt = System.currentTimeMillis(), updatedAt = 0))
+                runSync()
+            }
             _chat.update { list -> list.map { if (it.draft == draft) it.copy(draft = null, text = "SAVED") else it } }
-            runSync()
         }
     }
+
+    // --- Receipt scan -------------------------------------------------------------------------
+
+    sealed interface ScanState {
+        data object Idle : ScanState
+        data object Reading : ScanState
+        data object Structuring : ScanState
+        data class Done(val read: com.arthatis.wallet.ai.ChatEngine.ReceiptRead) : ScanState
+        /** [reason]: `ocr` (text could not be read), `image` (photo could not be opened). */
+        data class Failed(val reason: String) : ScanState
+    }
+
+    private val _scan = MutableStateFlow<ScanState>(ScanState.Idle)
+    val scan: StateFlow<ScanState> = _scan
+    private var scanJob: kotlinx.coroutines.Job? = null
+
+    /** Photo file → on-device OCR → same AI chain as chat (each engine time-limited) → parser fallback. The photo is deleted. */
+    fun scanReceipt(file: java.io.File) {
+        scanJob?.cancel()
+        scanJob = viewModelScope.launch {
+            _scan.value = ScanState.Reading
+            val text = try {
+                val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { com.arthatis.wallet.scan.ReceiptImage.load(file) }
+                if (bitmap == null) { _scan.value = ScanState.Failed("image"); return@launch }
+                kotlinx.coroutines.withTimeoutOrNull(30_000) { com.arthatis.wallet.scan.ReceiptImage.recognize(bitmap) }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null } finally { file.delete() }
+            if (text == null) { _scan.value = ScanState.Failed("ocr"); return@launch }
+            _scan.value = ScanState.Structuring
+            _scan.value = ScanState.Done(readReceipt(text))
+        }
+    }
+
+    fun cancelScan() { scanJob?.cancel(); scanJob = null; _scan.value = ScanState.Idle }
+
+    // --- Email auto-tracking --------------------------------------------------------------------
+
+    private val _emailDrafts = MutableStateFlow<List<com.arthatis.wallet.email.EmailDraft>>(emptyList())
+    val emailDrafts: StateFlow<List<com.arthatis.wallet.email.EmailDraft>> = _emailDrafts
+    private val _emailBusy = MutableStateFlow(false)
+    val emailBusy: StateFlow<Boolean> = _emailBusy
+
+    fun loadEmailDrafts() { viewModelScope.launch { _emailDrafts.value = graph.emailDrafts.all().sortedByDescending { it.receivedAt } } }
+
+    /** From the notification: wait for the splash, then open the drafts. */
+    fun openEmailDrafts() {
+        viewModelScope.launch {
+            ready.first { it }
+            if (_stack.value.singleOrNull() == Route.Loading) leaveSplash()
+            if (prefs.onboarded && _stack.value.last() != Route.EmailDrafts) go(Route.EmailDrafts)
+        }
+    }
+
+    /** Null on success, else the server's error message. */
+    suspend fun testEmail(host: String, port: Int, user: String, password: String): String? =
+        com.arthatis.wallet.email.Imap.test(host, port, user, password)
+
+    fun saveEmailSettings(enabled: Boolean, host: String, port: Int, user: String, password: String?, senders: List<String>) {
+        val changedAccount = host != prefs.emailHost || user != prefs.emailUser
+        prefs.emailHost = host; prefs.emailPort = port; prefs.emailUser = user; prefs.emailSenders = senders
+        if (!password.isNullOrEmpty()) prefs.emailPassword = password
+        if (changedAccount) { prefs.emailLastUid = 0; prefs.emailUidValidity = 0 }
+        prefs.emailEnabled = enabled
+        com.arthatis.wallet.email.EmailWorker.schedule(getApplication(), enabled)
+    }
+
+    /** Forgets the account, its password and every pending email draft. */
+    fun removeEmailAccount() {
+        viewModelScope.launch {
+            prefs.emailEnabled = false; prefs.emailPassword = null; prefs.emailUser = ""; prefs.emailLastUid = 0; prefs.emailUidValidity = 0
+            com.arthatis.wallet.email.EmailWorker.schedule(getApplication(), false)
+            graph.emailDrafts.clear(); loadEmailDrafts()
+        }
+    }
+
+    fun checkEmailNow() {
+        viewModelScope.launch {
+            _emailBusy.value = true
+            val result = runCatching { com.arthatis.wallet.email.EmailSyncer.run(getApplication()) }
+            _emailBusy.value = false
+            result.onSuccess { n -> say(if (n == 0) t("Tidak ada transaksi baru dari email.", "No new transactions from email.") else t("$n draf baru dari email.", "$n new drafts from email.")) }
+                .onFailure { prefs.emailLastError = it.message; say(t("Gagal membaca email: ${it.message ?: ""}", "Couldn't read email: ${it.message ?: ""}")) }
+            loadEmailDrafts()
+        }
+    }
+
+    fun confirmEmailDraft(d: com.arthatis.wallet.email.EmailDraft, walletId: String, categoryId: String?) {
+        viewModelScope.launch {
+            repo.saveTx(Tx(newId(), walletId, null, categoryId, d.kind, d.amountMinor, note = d.note, occurredAt = d.receivedAt, updatedAt = 0))
+            graph.emailDrafts.remove(d.id); loadEmailDrafts(); runSync()
+        }
+    }
+
+    fun discardEmailDraft(d: com.arthatis.wallet.email.EmailDraft) { viewModelScope.launch { graph.emailDrafts.remove(d.id); loadEmailDrafts() } }
 
     // --- Backup -------------------------------------------------------------------------------
 
@@ -407,7 +516,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun wipeEverything() {
         viewModelScope.launch {
-            repo.eraseAll(); prefs.wipeAll(); vault.ensureKeys(); repo.ensureDefaults()
+            repo.eraseAll(); prefs.wipeAll(); graph.emailDrafts.clear(); com.arthatis.wallet.email.EmailWorker.schedule(getApplication(), false); vault.ensureKeys(); repo.ensureDefaults()
             reloadSettings(); reset(Route.Welcome)
         }
     }

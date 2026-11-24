@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Backspace
@@ -211,6 +212,7 @@ fun AddWalletScreen(vm: AppViewModel, editId: String? = null) {
     var icon by remember { mutableStateOf(existing?.let { it.icon ?: legacyIcon(it.kind) } ?: "wallet") }
     var color by remember { mutableStateOf(existing?.color) }
     var currency by remember { mutableStateOf(existing?.currency ?: ledger.profile?.primaryCurrency ?: "IDR") }
+    var confirmDelete by remember { mutableStateOf(false) }
     var opening by remember { mutableStateOf(existing?.let { if (it.openingMinor == 0L) "" else com.arthatis.wallet.core.toMajor(it.openingMinor, it.currency).stripTrailingZeros().toPlainString() } ?: "") }
     Column(Modifier.fillMaxSize()) {
         TopBar(if (existing == null) tr("Tambah dompet", "Add wallet") else tr("Ubah dompet", "Edit wallet"), onBack = { vm.back() })
@@ -219,8 +221,8 @@ fun AddWalletScreen(vm: AppViewModel, editId: String? = null) {
             FieldLabel(tr("Tipe", "Type"))
             ChipRow { listOf(WalletKind.biasa, WalletKind.investasi, WalletKind.kartu).forEach { k -> AppChip(walletKindLabel(k), kind == k, { if (existing == null) { kind = k; if (icon == "wallet" || icon == "trending" || icon == "card") icon = legacyIcon(k) } }, enabled = existing == null) } }
             if (existing != null) Hint(tr("Tipe dan mata uang tidak bisa diubah setelah dompet dibuat.", "Type and currency can't be changed once the wallet is created."))
-            if (kind == WalletKind.kartu) Hint(tr("Saldo boleh minus dan dihitung sebagai utang, di luar total kas.", "Balance may go negative and counts as debt, outside the cash total."))
-            if (kind == WalletKind.investasi) Hint(tr("Dihitung terpisah dari total kas di Beranda.", "Counted apart from the cash total on Home."))
+            if (kind == WalletKind.kartu) Hint(tr("Saldo boleh minus; utangnya mengurangi total saldo di Beranda.", "Balance may go negative; the debt reduces the total balance on Home."))
+            if (kind == WalletKind.investasi) Hint(tr("Ikut dihitung di total saldo, dan tampil terpisah di rinciannya.", "Counted in the total balance and shown separately in its breakdown."))
             WalletStyleFields(icon, { icon = it }, color, { color = it })
             FieldLabel(tr("Mata uang", "Currency"))
             ChipRow { supportedCurrencies.forEach { c -> AppChip("${c.code} ${c.symbol}", currency == c.code, { if (existing == null) currency = c.code }, enabled = existing == null) } }
@@ -232,7 +234,27 @@ fun AddWalletScreen(vm: AppViewModel, editId: String? = null) {
                 else vm.updateWallet(existing.copy(name = name.trim(), icon = icon, color = color, openingMinor = minor))
                 vm.back()
             }, Modifier.fillMaxWidth(), enabled = name.isNotBlank())
+            if (existing != null) {
+                androidx.compose.foundation.layout.Spacer(Modifier.height(24.dp))
+                androidx.compose.material3.OutlinedButton(
+                    { confirmDelete = true }, Modifier.fillMaxWidth().height(48.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                    colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                ) {
+                    androidx.compose.material3.Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp))
+                    androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
+                    Text(tr("Hapus dompet", "Delete wallet"))
+                }
+            }
         }
+    }
+    if (existing != null && confirmDelete) {
+        val count = ledger.liveTxs.count { it.walletId == existing.id || it.toWalletId == existing.id }
+        ConfirmDialog(
+            tr("Hapus ${existing.name}?", "Delete ${existing.name}?"),
+            tr("Dompet dan $count transaksinya dihapus dari perangkat ini dan perangkat tersinkron.", "The wallet and its $count transactions are removed from this device and synced devices."),
+            tr("Hapus", "Delete"), { confirmDelete = false },
+        ) { confirmDelete = false; vm.deleteWallet(existing); vm.back() }
     }
 }
 

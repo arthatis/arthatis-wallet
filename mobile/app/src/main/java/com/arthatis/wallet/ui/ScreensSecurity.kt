@@ -240,6 +240,11 @@ fun DataBackupScreen(vm: AppViewModel, importPick: () -> Unit) {
                 }
             } }
             AppCard(padding = 20.dp) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(tr("Laporan keuangan", "Financial report"), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Hint(tr("Ringkasan, per kategori, per dompet, dan daftar transaksi dalam rentang tanggal, sebagai PDF.", "Summary, by category, by wallet and the transaction list for a date range, as a PDF."))
+                AppButton(tr("Buat laporan PDF", "Create PDF report"), { vm.go(Route.Report) }, Modifier.fillMaxWidth(), style = BtnStyle.Tonal)
+            } }
+            AppCard(padding = 20.dp) { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(tr("Impor data", "Import data"), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Hint(tr("Gabungkan atau ganti data yang ada di perangkat ini.", "Merge into or replace the data on this device."))
                 AppButton(tr("Pilih file .arthatis / CSV", "Choose .arthatis / CSV file"), importPick, Modifier.fillMaxWidth(), style = BtnStyle.Outlined)

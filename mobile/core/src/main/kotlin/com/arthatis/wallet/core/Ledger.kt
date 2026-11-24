@@ -24,15 +24,22 @@ fun walletBalance(wallet: Wallet, txs: List<Tx>): Long {
     return total
 }
 
-/** Total of all wallets converted into [currency]. Null when a needed rate is unavailable. */
+/**
+ * Net worth in [currency]: cash + investments + credit cards (a card's negative balance is debt and subtracts).
+ * Null when a needed rate is unavailable.
+ */
 fun totalBalance(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): Long? =
+    sumBalances(wallets, txs, currency, rates)
+
+/** Cash wallets only (everything that is neither investment nor credit card). */
+fun cashTotal(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): Long? =
     sumBalances(wallets.filter { !it.kind.isCredit && !it.kind.isInvestment }, txs, currency, rates)
 
-/** Investment wallets only; kept apart from the cash total. */
+/** Investment wallets only. */
 fun investmentTotal(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): Long? =
     sumBalances(wallets.filter { it.kind.isInvestment }, txs, currency, rates)
 
-/** Credit-card wallets only: negative = debt. Kept apart from the cash total. */
+/** Credit-card wallets only: negative = debt. */
 fun creditTotal(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): Long? =
     sumBalances(wallets.filter { it.kind.isCredit }, txs, currency, rates)
 
@@ -70,6 +77,10 @@ fun periodFlow(
     }
     return Flow(income, expense)
 }
+
+/** Wallets by balance in [currency], highest first. A wallet whose rate is missing is ranked by its own amount. */
+fun walletsByBalance(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): List<Wallet> =
+    wallets.sortedByDescending { w -> walletBalance(w, txs).let { rates.convert(it, w.currency, currency) ?: it } }
 
 fun monthBounds(day: LocalDate, zone: ZoneId = ZoneOffset.UTC): Pair<Long, Long> {
     val start = day.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()

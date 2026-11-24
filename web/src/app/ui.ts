@@ -15,6 +15,7 @@ export const theme = () => localStorage.getItem("theme") ?? "system";
 export const setTheme = (v: string) => { localStorage.setItem("theme", v); applyTheme(); };
 
 const P: Record<string, string> = {
+  download: "M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z",
   dashboard: "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z",
   tx: "M19.5 3.5 18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2v14H3v3c0 1.66 1.34 3 3 3h12c1.66 0 3-1.34 3-3V2l-1.5 1.5zM19 19c0 .55-.45 1-1 1s-1-.45-1-1v-3H8V5h11v14z",
   wallet: "M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z",
@@ -105,5 +106,13 @@ export function bindAmountInputs(groupAmount: (raw: string, currency: string) =>
     let seen = 0; let pos = 0;
     while (pos < next.length && seen < significant) { if (next[pos] !== group) seen++; pos++; }
     el.setSelectionRange(pos, pos);
+  });
+}
+
+/** After a render: every `.amt` that overflows its box switches to its compact form (and back when there is room). */
+export function fitAmounts(root: ParentNode = document) {
+  root.querySelectorAll<HTMLElement>(".amt[data-compact]").forEach((el) => {
+    el.textContent = el.dataset.full ?? el.textContent;
+    if (el.scrollWidth > el.clientWidth + 1) el.textContent = el.dataset.compact ?? el.textContent;
   });
 }

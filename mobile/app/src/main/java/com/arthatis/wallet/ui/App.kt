@@ -23,6 +23,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.ui.platform.LocalContext
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -69,7 +72,14 @@ fun ArthatisApp(vm: AppViewModel, pickBackup: () -> Unit) {
                 snackbarHost = { SnackbarHost(host) },
                 bottomBar = { if (route == Route.Main) NavBar(tab, vm::selectTab) },
             ) { padding ->
-                Box(Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding()).statusBarsPadding().then(if (route == Route.Main) Modifier else Modifier.navigationBarsPadding()).imePadding()) {
+                // Scrolling pages draw edge to edge down to the bottom (behind the nav bar / gesture bar) and reserve that
+                // space at the end of their content instead, so nothing is clipped by a padded box above the bar.
+                // Screens with controls pinned to the bottom (keypad, chat input, onboarding buttons) keep the inset padding.
+                val pinned = route is Route.AddTx || route == Route.Chat || route == Route.Welcome || route == Route.Onboarding || route == Route.Restore || route == Route.Loading
+                val navInset = androidx.compose.foundation.layout.WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                val pageBottom = when { route == Route.Main -> padding.calculateBottomPadding(); pinned -> 0.dp; else -> navInset }
+                androidx.compose.runtime.CompositionLocalProvider(LocalPageBottom provides pageBottom) {
+                Box(Modifier.fillMaxSize().statusBarsPadding().then(if (pinned) Modifier.navigationBarsPadding() else Modifier).imePadding()) {
                     Crossfade(route to tab, label = "route") { (r, t) ->
                         when (r) {
                             Route.Loading -> LoadingScreen(vm)
@@ -104,8 +114,12 @@ fun ArthatisApp(vm: AppViewModel, pickBackup: () -> Unit) {
                             Route.AiSettings -> AiSettingsScreen(vm)
                             Route.Budgets -> BudgetsScreen(vm)
                             Route.LinkWeb -> LinkWebScreen(vm)
+                            Route.Report -> ReportScreen(vm)
+                            Route.EmailSync -> EmailSyncScreen(vm)
+                            Route.EmailDrafts -> EmailDraftsScreen(vm)
                         }
                     }
+                }
                 }
             }
         }

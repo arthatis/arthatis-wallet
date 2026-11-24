@@ -45,14 +45,13 @@ fun parseChat(
     if (text.isEmpty()) return null
     val amount = readAmount(text) ?: return null
     val lower = text.lowercase()
-    val mentioned = wallets.filter { lower.contains(it.name.lowercase()) }
-    val transfer = lower.contains("transfer") || lower.contains("pindah")
-    if (transfer) {
-        val directed = directedWallets(lower, wallets)
-        val from = directed?.first ?: mentioned.getOrNull(0)
-        val to = directed?.second ?: mentioned.getOrNull(1)
-        if (from == null || to == null || from.id == to.id) return null
-        return ChatDraft(EntryKind.transfer, toMinor(amount, currency), currency, text, null, from.id, to.id)
+    val mentioned = mentionedWallets(lower, wallets)
+    val strong = strongTransfer.containsMatchIn(lower)
+    if (strong || (weakTransfer.containsMatchIn(lower) && mentioned.isNotEmpty())) {
+        val (from, to) = transferEnds(lower, wallets, mentioned)
+        // A missing side is chosen on the draft card; both sides the same is not a transfer.
+        if (from != null && from.id == to?.id) return null
+        return ChatDraft(EntryKind.transfer, toMinor(amount, currency), currency, text, null, from?.id, to?.id)
     }
     val key = keywords.entries.firstOrNull { lower.contains(it.key) }?.value
     val category = (key?.let { k -> categories.firstOrNull { it.key == k } }
@@ -68,10 +67,47 @@ fun parseChat(
     )
 }
 
-private fun directedWallets(lower: String, wallets: List<NamedRef>): Pair<NamedRef, NamedRef>? {
-    val match = Regex("""(?:from|dari)\s+(.+?)\s+(?:to|ke)\s+(.+)$""").find(lower) ?: return null
-    val from = wallets.firstOrNull { match.groupValues[1].contains(it.name.lowercase()) } ?: return null
-    val to = wallets.firstOrNull { match.groupValues[2].contains(it.name.lowercase()) } ?: return null
+/** Words that always mean a move between own wallets. */
+private val strongTransfer = Regex("""\b(transfer|trf|tf|pindah\w*|top\s?up|isi\s+saldo|tarik\s+tunai|setor\s+tunai)\b""")
+/** Words that mean a transfer only when a wallet is named ("kirim paket 20k" is an expense). */
+private val weakTransfer = Regex("""\b(kirim|send|move)\b""")
+
+private fun squash(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+
+/** Finds a wallet named in [text]: case, spaces and punctuation are ignored; the longest name wins ("BCA Syariah" over "BCA"). */
+fun matchWallet(text: String, wallets: List<NamedRef>): NamedRef? {
+    val t = squash(text)
+    if (t.isEmpty()) return null
+    return wallets.filter { squash(it.name).isNotEmpty() && t.contains(squash(it.name)) }.maxByOrNull { squash(it.name).length }
+        ?: wallets.firstOrNull { squash(it.name).contains(t) && t.length >= 3 }
+}
+
+private fun mentionedWallets(lower: String, wallets: List<NamedRef>): List<NamedRef> {
+    val text = squash(lower)
+    // Ordered by first appearance, so "BCA … OVO" reads left to right; longer names first so "BCA Syariah" beats "BCA".
+    return wallets.filter { squash(it.name).isNotEmpty() && text.contains(squash(it.name)) }
+        .sortedByDescending { squash(it.name).length }
+        .fold(mutableListOf<Pair<Int, NamedRef>>()) { acc, w ->
+            val at = text.indexOf(squash(w.name))
+            if (acc.none { (pos, other) -> at >= pos && at < pos + squash(other.name).length }) acc += at to w
+            acc
+        }.sortedBy { it.first }.map { it.second }
+}
+
+/** Source and destination: "dari X ke Y", "ke Y" only, "dari X" only, or the order the wallets were named in. */
+private fun transferEnds(lower: String, wallets: List<NamedRef>, mentioned: List<NamedRef>): Pair<NamedRef?, NamedRef?> {
+    val fromText = Regex("""\b(?:dari|from)\s+(.+?)(?=\s+(?:ke|to|kepada)\s|$)""").find(lower)?.groupValues?.get(1)
+    val toText = Regex("""\b(?:ke|to|kepada)\s+(.+?)(?=\s+(?:dari|from)\s|$)""").find(lower)?.groupValues?.get(1)
+    var from = fromText?.let { matchWallet(it, wallets) }
+    var to = toText?.let { matchWallet(it, wallets) }
+    if (from == null && to == null) {
+        // "top up gopay 100k": the one wallet named is where the money goes.
+        if (mentioned.size == 1 && Regex("""\b(top\s?up|isi\s+saldo|setor)\b""").containsMatchIn(lower)) return null to mentioned[0]
+        return mentioned.getOrNull(0) to mentioned.getOrNull(1)
+    }
+    val rest = mentioned.filter { it.id != from?.id && it.id != to?.id }
+    if (from == null && fromText == null) from = rest.firstOrNull()
+    if (to == null && toText == null) to = rest.firstOrNull { it.id != from?.id }
     return from to to
 }
 

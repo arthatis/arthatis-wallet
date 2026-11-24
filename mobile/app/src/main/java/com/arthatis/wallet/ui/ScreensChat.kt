@@ -123,14 +123,28 @@ private fun Bubble(mine: Boolean, text: String, time: String = "") {
 private fun DraftCard(vm: AppViewModel, m: com.arthatis.wallet.ChatMessage, ledger: com.arthatis.wallet.data.Ledger) {
     val d = m.draft!!
     val cat = ledger.category(d.categoryId)
-    var walletId by remember { mutableStateOf(d.walletId ?: ledger.liveWallets.firstOrNull()?.id) }
+    val transfer = d.kind == EntryKind.transfer
+    var walletId by remember { mutableStateOf(d.walletId ?: ledger.liveWallets.firstOrNull { it.id != d.toWalletId }?.id) }
+    var toId by remember { mutableStateOf(d.toWalletId ?: if (transfer) ledger.liveWallets.firstOrNull { it.id != walletId }?.id else null) }
+    val rates by vm.rates.collectAsState()
+    val from = ledger.wallet(walletId); val to = toId?.let { ledger.wallet(it) }
     AppCard(padding = 16.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(tr("Draf transaksi", "Draft entry"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-            Text(formatMinor(d.amountMinor, ledger.wallet(walletId)?.currency ?: d.currency, txSign(d.kind)), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+            Text(if (transfer) tr("Draf transfer", "Draft transfer") else tr("Draf transaksi", "Draft entry"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(formatMinor(d.amountMinor, from?.currency ?: d.currency, if (transfer) com.arthatis.wallet.core.Sign.None else txSign(d.kind)), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
             Hint(listOfNotNull(cat?.let { categoryName(it) }, d.note).joinToString(" · "))
-            WalletPicker(ledger.wallet(walletId), ledger, { walletId = it.id })
-            AppButton(tr("Simpan draf", "Save draft"), { vm.confirmDraft(d, walletId) }, Modifier.fillMaxWidth(), size = BtnSize.S)
+            if (transfer) FieldLabel(tr("Dari", "From"))
+            WalletPicker(from, ledger, { walletId = it.id; if (toId == it.id) toId = null }, exclude = if (transfer) toId else null)
+            if (transfer) {
+                FieldLabel(tr("Ke", "To"))
+                WalletPicker(to, ledger, { toId = it.id }, exclude = walletId)
+                if (from != null && to != null && from.currency != to.currency) {
+                    val received = rates.convert(d.amountMinor, from.currency, to.currency)
+                    Hint(if (received != null) tr("Diterima ≈ ${formatMinor(received, to.currency)} (kurs API)", "Received ≈ ${formatMinor(received, to.currency)} (API rate)") else tr("Kurs belum tersedia; kamu akan diminta isi kurs manual.", "No rate yet; you'll be asked for a manual rate."))
+                }
+            }
+            AppButton(tr("Simpan draf", "Save draft"), { vm.confirmDraft(d, walletId, toId) }, Modifier.fillMaxWidth(), size = BtnSize.S,
+                enabled = from != null && (!transfer || (to != null && to.id != from.id)))
         }
     }
 }
@@ -145,38 +159,30 @@ fun ReceiptScreen(vm: AppViewModel) {
     val ledger by vm.ledger.collectAsState()
     val currency = ledger.profile?.primaryCurrency ?: "IDR"
     val lines = remember { mutableStateListOf<RLine>() }
-    var scanned by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
+    val scan by vm.scan.collectAsState()
     var split by remember { mutableStateOf(false) }
     var engineUsed by remember { mutableStateOf<com.arthatis.wallet.ai.Engine?>(null) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var categoryId by remember { mutableStateOf<String?>(null) }
     var walletId by remember { mutableStateOf(ledger.liveWallets.firstOrNull()?.id) }
     val file = remember { File(ctx.cacheDir, "receipt.jpg") }
     val uri = remember { FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file) }
     val wallet = ledger.wallet(walletId)
     val cur = wallet?.currency ?: currency
+    val busy = scan == AppViewModel.ScanState.Reading || scan == AppViewModel.ScanState.Structuring
+    val scanned = scan is AppViewModel.ScanState.Done
+    // Leaving the screen stops any scan still running.
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { vm.cancelScan() } }
+    LaunchedEffect(scan) {
+        val done = scan as? AppViewModel.ScanState.Done ?: return@LaunchedEffect
+        lines.clear()
+        val total = done.read.lines.lastOrNull { it.isTotal }
+        done.read.lines.forEach { lines += RLine(it, if (total != null) it == total else true) }
+        done.read.categoryId?.let { categoryId = it }
+        engineUsed = done.read.engine
+    }
 
     val shoot = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        if (!ok) return@rememberLauncherForActivityResult
-        busy = true
-        val bitmap = BitmapFactory.decodeFile(file.path)
-        if (bitmap == null) { busy = false; return@rememberLauncherForActivityResult }
-        TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).process(InputImage.fromBitmap(bitmap, 0))
-            .addOnSuccessListener { text ->
-                // Text was read on the phone. Structuring it goes through the same AI engine as chat (so switching AI switches this too).
-                scope.launch {
-                    val read = vm.readReceipt(text.text)
-                    lines.clear()
-                    val total = read.lines.lastOrNull { it.isTotal }
-                    read.lines.forEach { lines += RLine(it, if (total != null) it == total else true) }
-                    read.categoryId?.let { categoryId = it }
-                    engineUsed = read.engine
-                    scanned = true
-                    busy = false
-                }
-            }
-            .addOnCompleteListener { file.delete() }
+        if (ok) vm.scanReceipt(file)
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) shoot.launch(uri) else vm.say(vm.t("Izin kamera ditolak.", "Camera permission denied.")) }
     fun capture() {
@@ -190,6 +196,13 @@ fun ReceiptScreen(vm: AppViewModel) {
         Page {
             Hint(tr("Foto diproses di perangkat dan tidak diunggah. Periksa angka yang bertanda.", "The photo is processed on this device and never uploaded. Check flagged numbers."))
             AppButton(if (scanned) tr("Scan ulang", "Scan again") else tr("Ambil foto struk", "Take receipt photo"), ::capture, Modifier.fillMaxWidth(), style = if (scanned) BtnStyle.Tonal else BtnStyle.Filled, icon = Icons.Rounded.CameraAlt, loading = busy)
+            if (busy) Row(verticalAlignment = Alignment.CenterVertically) {
+                Hint(if (scan == AppViewModel.ScanState.Reading) tr("Membaca teks di HP…", "Reading text on the phone…") else tr("Menyusun dengan AI… (maks. ±1 menit, lalu parser di HP)", "Structuring with AI… (up to ~1 min, then the on-device parser)"), Modifier.weight(1f))
+                AppButton(tr("Batal", "Cancel"), { vm.cancelScan() }, style = BtnStyle.Text, size = BtnSize.S)
+            }
+            (scan as? AppViewModel.ScanState.Failed)?.let { f ->
+                Text(if (f.reason == "image") tr("Foto tidak bisa dibuka. Coba ambil ulang.", "The photo couldn't be opened. Try again.") else tr("Teks struk tidak terbaca. Coba foto lebih dekat, terang, dan tegak.", "Couldn't read the receipt text. Try a closer, brighter, upright photo."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
             engineUsed?.let { Hint(tr("Dibaca oleh: ", "Read by: ") + when (it) { com.arthatis.wallet.ai.Engine.Nano -> "Gemini Nano"; com.arthatis.wallet.ai.Engine.Server -> tr("AI server", "Server AI"); com.arthatis.wallet.ai.Engine.Cloud -> tr("API pribadi", "Your API key"); com.arthatis.wallet.ai.Engine.Local -> tr("parser di HP", "on-device parser") }) }
             if (scanned && lines.isEmpty()) EmptyState(Pose.Worried, tr("Tidak ada angka terbaca", "No amounts were read"), tr("Coba foto lebih dekat dan terang.", "Try a closer, brighter photo."), ollieSize = 96.dp)
             lines.forEachIndexed { i, rl ->

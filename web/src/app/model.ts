@@ -26,15 +26,16 @@ export interface Ledger {
 export const emptyLedger = (): Ledger => ({ wallets: [], categories: [], txs: [], recurring: [], overrides: [], budgets: [], profile: null });
 
 /** group = thousands separator, decimal = fraction mark. IDR and EUR use `.` / `,`; the rest `,` / `.`. Same as the phone. */
+/** Every currency keeps 4 decimals (1 minor = 1/10.000). [min] = fraction digits always shown (IDR hides an all-zero fraction). */
 export const CURRENCIES = [
-  { code: "IDR", scale: 4, symbol: "Rp", group: ".", decimal: ",", trim: true }, { code: "USD", scale: 2, symbol: "$", group: ",", decimal: "." },
-  { code: "SGD", scale: 2, symbol: "S$", group: ",", decimal: "." }, { code: "MYR", scale: 2, symbol: "RM", group: ",", decimal: "." },
-  { code: "EUR", scale: 2, symbol: "\u20ac", group: ".", decimal: "," },
+  { code: "IDR", scale: 4, symbol: "Rp", group: ".", decimal: ",", min: 0 }, { code: "USD", scale: 4, symbol: "$", group: ",", decimal: ".", min: 2 },
+  { code: "SGD", scale: 4, symbol: "S$", group: ",", decimal: ".", min: 2 }, { code: "MYR", scale: 4, symbol: "RM", group: ",", decimal: ".", min: 2 },
+  { code: "EUR", scale: 4, symbol: "\u20ac", group: ".", decimal: ",", min: 2 },
 ];
-const info = (code: string): { code: string; scale: number; symbol: string; group: string; decimal: string; trim?: boolean } => CURRENCIES.find((c) => c.code === code) ?? { code, scale: 2, symbol: code, group: ",", decimal: "." };
+const info = (code: string): { code: string; scale: number; symbol: string; group: string; decimal: string; min: number } => CURRENCIES.find((c) => c.code === code) ?? { code, scale: 4, symbol: code, group: ",", decimal: ".", min: 2 };
 
 export const WALLET_ICONS = ["wallet", "bank", "cash", "phone", "card", "savings", "trending", "gift", "home", "car", "shopping", "coin"];
-export const WALLET_COLORS = ["#1B6D35", "#006A6A", "#0061A4", "#6750A4", "#984061", "#BA1A1A", "#8B5000", "#6D5E00", "#4A6267", "#5C5F5C"];
+export const WALLET_COLORS = ["#2E7D32", "#00897B", "#1E88E5", "#3949AB", "#8E24AA", "#D81B60", "#E53935", "#FB8C00", "#FDD835", "#6D4C41"];
 const LEGACY_ICON: Record<string, string> = { rekening: "bank", tunai: "cash", ewallet: "phone", investasi: "trending", kartu: "card", biasa: "wallet" };
 export const walletIconKey = (w: Wallet) => w.icon ?? LEGACY_ICON[w.kind] ?? "wallet";
 
@@ -73,16 +74,38 @@ export function evaluateAmount(raw: string, currency: string): number | null {
 export type Sign = "none" | "plus" | "minus";
 /** `Rp14.125.000`, `$1,060.79`, `\u20ac1.060,79`, `+Rp8.500.000`, `−Rp25.000` — same as the phone. */
 export function formatMinor(minor: number, currency: string, sign: Sign = "none"): string {
-  const { scale, symbol, trim } = info(currency);
+  const { scale, symbol, min } = info(currency);
   const abs = Math.abs(minor);
   const { group, decimal } = info(currency);
   const whole = Math.floor(abs / 10 ** scale).toString().replace(/\B(?=(\d{3})+(?!\d))/g, group);
   const raw = scale ? (abs % 10 ** scale).toString().padStart(scale, "0") : "";
-  const digits = trim ? raw.replace(/0+$/, "") : raw;
+  const digits = raw.replace(/0+$/, "").padEnd(min, "0");
   const frac = digits ? decimal + digits : "";
   const prefix = sign === "plus" ? "+" : sign === "minus" ? "−" : minor < 0 ? "−" : "";
   return `${prefix}${symbol}${whole}${frac}`;
 }
+/** Short form for amounts that do not fit: `Rp4,1k`, `$6.7m`, `Rp7,2b`, `$1.5t`. Below 1.000 the full amount. Same as the phone. */
+export function formatCompact(minor: number, currency: string, sign: Sign = "none"): string {
+  const { scale, symbol, decimal } = info(currency);
+  const major = Math.abs(minor) / 10 ** scale;
+  const unit = ([[1e12, "t"], [1e9, "b"], [1e6, "m"], [1e3, "k"]] as const).find(([d]) => major >= d);
+  if (!unit) return formatMinor(minor, currency, sign);
+  const short = (Math.floor((major / unit[0]) * 10) / 10).toString().replace(".", decimal);
+  const prefix = sign === "plus" ? "+" : sign === "minus" ? "−" : minor < 0 ? "−" : "";
+  return `${prefix}${symbol}${short}${unit[1]}`;
+}
+
+/** Compact form of a string made by [formatMinor]; null when it is not a money string. */
+export function compactOf(formatted: string): string | null {
+  const first = formatted[0]; const sign: Sign = first === "+" ? "plus" : first === "−" || first === "-" ? "minus" : "none";
+  const body = sign === "none" ? formatted : formatted.slice(1);
+  const cur = [...CURRENCIES].sort((a, b) => b.symbol.length - a.symbol.length).find((c) => body.startsWith(c.symbol)); if (!cur) return null;
+  const num = Number(body.slice(cur.symbol.length).split(cur.group).join("").replace(cur.decimal, "."));
+  if (!Number.isFinite(num)) return null;
+  const minor = toMinor(num, cur.code);
+  return formatCompact(sign === "minus" ? -minor : minor, cur.code, sign === "plus" ? "plus" : "none");
+}
+
 export const toMinor = (major: number, currency: string) => Math.round(major * 10 ** info(currency).scale);
 export const toMajor = (minor: number, currency: string) => minor / 10 ** info(currency).scale;
 
@@ -140,8 +163,10 @@ export function balance(w: Wallet, txs: Tx[]): number {
   return t;
 }
 
-/** Cash total: credit cards and investments are kept out and shown apart. */
-export const totalBalance = (l: Ledger, currency: string, rates: Rates) => sumKinds(l, currency, rates, (w) => w.kind !== "kartu" && w.kind !== "investasi");
+/** Net worth: cash + investments + credit cards (card debt is negative and subtracts). Same as the phone. */
+export const totalBalance = (l: Ledger, currency: string, rates: Rates) => sumKinds(l, currency, rates, () => true);
+/** Cash wallets only. */
+export const cashTotal = (l: Ledger, currency: string, rates: Rates) => sumKinds(l, currency, rates, (w) => w.kind !== "kartu" && w.kind !== "investasi");
 export const investmentTotal = (l: Ledger, currency: string, rates: Rates) => sumKinds(l, currency, rates, (w) => w.kind === "investasi");
 /** Negative = debt. */
 export const creditTotal = (l: Ledger, currency: string, rates: Rates) => sumKinds(l, currency, rates, (w) => w.kind === "kartu");

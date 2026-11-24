@@ -1,7 +1,7 @@
 import * as C from "./crypto";
 import { barChart, donut, lineChart } from "./charts";
 import {
-  ENTITY, Rates, balance, buildTransfer, evaluate, evaluateAmount, amountText, WALLET_ICONS, WALLET_COLORS, walletIconKey, investmentTotal, creditTotal, flow, formatMinor, live, monthRange, newId, pairKey, spendByCategory, toCsv, toMinor, totalBalance, dayStart,
+  ENTITY, Rates, balance, buildTransfer, evaluate, evaluateAmount, amountText, WALLET_ICONS, WALLET_COLORS, walletIconKey, investmentTotal, creditTotal, cashTotal, formatCompact, compactOf, flow, formatMinor, live, monthRange, newId, pairKey, spendByCategory, toCsv, toMinor, totalBalance, dayStart,
   CURRENCIES, type ArchiveData, type Category, type EntryKind, type Frequency, type Ledger, type Recurring, type Tx, type Wallet, type WalletKind,
 } from "./model";
 import { session } from "./session";
@@ -35,8 +35,11 @@ export function txRow(tx: Tx, l: Ledger, edit = true): string {
 function walletRow(w: Wallet, l: Ledger): string {
   const key = walletIconKey(w); const tint = w.color ? ` style="--wc:${esc(w.color)}"` : "";
   const meta = typeOf(w.kind) === "biasa" ? w.currency : `${kindLabel(w.kind)} · ${w.currency}`;
-  return `<button class="row wallet" data-act="edit-wallet" data-id="${w.id}"><span class="icon${w.color ? " tinted" : ""}"${tint}>${icon(key === "wallet" ? "wallet" : "wi_" + key)}</span><span class="texts"><b>${esc(w.name)}</b><span class="muted small">${esc(meta)}</span></span><span class="amount">${esc(formatMinor(balance(w, l.txs), w.currency))}</span></button>`;
+  return `<button class="row wallet" data-act="edit-wallet" data-id="${w.id}"><span class="icon${w.color ? " tinted" : ""}"${tint}>${icon(key === "wallet" ? "wallet" : "wi_" + key)}</span><span class="texts"><b>${esc(w.name)}</b><span class="muted small">${esc(meta)}</span></span><span class="amount">${amt(formatMinor(balance(w, l.txs), w.currency))}</span></button>`;
 }
+
+/** Money that falls back to its compact form (`Rp4,1k`) when it does not fit; see fitAmounts() in ui.ts. */
+const amt = (full: string) => { const c = compactOf(full); return c ? `<span class="amt" data-full="${esc(full)}" data-compact="${esc(c)}">${esc(full)}</span>` : esc(full); };
 
 // --- Dashboard (W02) ----------------------------------------------------------------------------
 function chartsBlock(c: Ctx): string {
@@ -60,13 +63,13 @@ export function dashboard(c: Ctx): string {
   const now = new Date(); const [ms, me] = monthRange(now.getUTCFullYear(), now.getUTCMonth());
   const total = totalBalance(l, currency, rates); const f = flow(l, currency, rates, ms, me);
   const wallets = live(l.wallets); const fmt = (n: number) => formatMinor(n, currency);
-  const inv = investmentTotal(l, currency, rates), debt = creditTotal(l, currency, rates);
-  const extras = [inv ? `${t("Investasi", "Investments")} ${fmt(inv)}` : "", debt ? `${t("Kartu kredit", "Credit cards")} ${fmt(debt)}` : ""].filter(Boolean).join(" · ");
+  const inv = investmentTotal(l, currency, rates), debt = creditTotal(l, currency, rates), cash = cashTotal(l, currency, rates);
+  const extras = inv || debt ? [cash !== null ? `${t("Kas", "Cash")} ${formatCompact(cash, currency)}` : "", inv ? `${t("Investasi", "Investments")} ${formatCompact(inv, currency)}` : "", debt ? `${t("Kartu kredit", "Credit cards")} ${formatCompact(debt, currency)}` : ""].filter(Boolean).join(" · ") : "";
   return `
   <div class="grid cols-top">
     <div class="hero"><div style="display:flex;justify-content:space-between"><span class="small">${t("Total saldo", "Total balance")}</span><span class="pill" style="background:var(--surfaceContainerLowest);color:var(--onSurface)"><i class="dot"></i>${session.online ? t("Tersinkron", "Synced") : t("Offline", "Offline")}</span></div>
-      <div class="big">${total === null ? "—" : esc(fmt(total))}</div><span class="small">${t(`${wallets.length} dompet · total kas dalam ${currency}`, `${wallets.length} wallets · cash total in ${currency}`)}${extras ? `<br>${esc(extras)}` : ""}</span><hr>
-      <div class="stats"><div><div class="small">${t("Masuk", "Income")}</div><div class="income">${esc(formatMinor(f.income, currency, "plus"))}</div></div><div><div class="small">${t("Keluar", "Expense")}</div><div class="expense">${esc(formatMinor(f.expense, currency, "minus"))}</div></div></div></div>
+      <div class="big">${total === null ? "—" : amt(fmt(total))}</div><span class="small">${t(`${wallets.length} dompet · dalam ${currency}`, `${wallets.length} wallets · in ${currency}`)}${extras ? `<br>${esc(extras)}` : ""}</span><hr>
+      <div class="stats"><div><div class="small">${t("Masuk", "Income")}</div><div class="income">${amt(formatMinor(f.income, currency, "plus"))}</div></div><div><div class="small">${t("Keluar", "Expense")}</div><div class="expense">${amt(formatMinor(f.expense, currency, "minus"))}</div></div></div></div>
     <div class="card"><div class="section-title">${t("Bareng", "Shared")}<span class="grow"></span><button class="link" data-act="go" data-page="bareng">${t("Buka", "Open")}</button></div><p class="muted">${t("Wallet bareng ada di menu Bareng. Kunci grup disalin dari HP.", "Shared wallets live in the Shared menu. Group keys are mirrored from your phone.")}</p></div>
   </div>
   ${chartsBlock(c)}
@@ -163,7 +166,7 @@ function pickers(icon0: string, color0: string): string {
 
 export async function walletDialog(c: Ctx, existing?: Wallet) {
   const body = `${field("name", t("Nama dompet", "Wallet name"), existing?.name ?? "", { required: true })}${existing ? `<div class="field"><label>${t("Tipe", "Type")}</label><input value="${esc(kindLabel(existing.kind))}" disabled></div>` : select("kind", t("Tipe", "Type"), (["biasa", "investasi", "kartu"] as WalletKind[]).map((k) => [k, kindLabel(k)]), "biasa")}
-    <p class="muted small">${existing ? t("Tipe dan mata uang tidak bisa diubah setelah dompet dibuat.", "Type and currency can't be changed once the wallet is created.") : t("Kartu kredit: saldo boleh minus, dihitung sebagai utang di luar total kas. Investasi: dihitung terpisah.", "Credit card: balance may go negative and counts as debt outside the cash total. Investment: counted apart.")}</p>
+    <p class="muted small">${existing ? t("Tipe dan mata uang tidak bisa diubah setelah dompet dibuat.", "Type and currency can't be changed once the wallet is created.") : t("Kartu kredit: saldo boleh minus; utangnya mengurangi total saldo. Investasi: ikut total saldo, tampil terpisah di rincian.", "Credit card: balance may go negative; the debt reduces the total balance. Investment: part of the total, shown apart in the breakdown.")}</p>
     ${pickers(existing ? walletIconKey(existing) : "wallet", existing?.color ?? "")}
     ${existing ? `<div class="field"><label>${t("Mata uang", "Currency")}</label><input value="${existing.currency}" disabled></div>` : select("currency", t("Mata uang", "Currency"), CURRENCIES.map((x) => [x.code, `${x.code} ${x.symbol}`]), c.currency)}
     ${field("opening", t("Saldo awal (opsional)", "Opening balance (optional)"), existing ? amountText(existing.openingMinor, existing.currency) : "", { amount: existing?.currency ?? c.currency })}
@@ -238,7 +241,15 @@ export async function deleteWallet(c: Ctx, w: Wallet) {
 }
 
 // --- Reports ------------------------------------------------------------------------------------
-export function reports(c: Ctx): string { return chartsBlock(c); }
+/** Date range for the PDF export; default the last 30 days up to today (kept while the page is open). */
+export const reportRange = { from: "", to: "" };
+export function reports(c: Ctx): string {
+  const today = new Date().toISOString().slice(0, 10); const back = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+  if (!reportRange.to) { reportRange.to = today; reportRange.from = back; }
+  return `<div class="card"><div class="section-title">${t("Ekspor laporan keuangan", "Export financial report")}</div><p class="muted small">${t("Ringkasan, per kategori, per dompet, dan daftar transaksi dalam rentang tanggal. Dicetak di browser ini sebagai PDF (pilih “Simpan sebagai PDF”).", "Summary, by category, by wallet and the transaction list for a date range. Printed by this browser as a PDF (choose “Save as PDF”).")}</p>
+    <div class="chips" style="align-items:end"><label class="small">${t("Dari", "From")}<br><input type="date" id="rep-from" value="${reportRange.from}" max="${today}"></label><label class="small">${t("Sampai", "To")}<br><input type="date" id="rep-to" value="${reportRange.to}" max="${today}"></label><button class="btn" data-act="export-pdf">${icon("download")}${t("Ekspor PDF", "Export PDF")}</button></div></div>
+  ${chartsBlock(c)}`;
+}
 
 export async function budgetsDialog(c: Ctx) {
   const cats = live(c.ledger.categories).filter((k) => k.kind === "expense" && !k.hidden && k.key !== "bills");

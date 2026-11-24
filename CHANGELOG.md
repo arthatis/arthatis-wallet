@@ -2,6 +2,17 @@
 
 Versi mengikuti [SemVer](https://semver.org). Selama `0.0.x` ini adalah pra-rilis: belum di Play Store, belum diaudit, dan APK ditandatangani dengan kunci debug.
 
+## [0.0.4] — pra-rilis (belum dirilis)
+
+- **Semua mata uang 4 desimal** (USD/SGD/MYR/EUR juga, bukan hanya Rupiah). Tampilan non-IDR minimal 2 digit (`$5.00`, `$1,060.7925`). **Tidak kompatibel dengan data 0.0.3** untuk dompet non-IDR: hapus data HP dan server sebelum memasang.
+- **Total saldo = kekayaan bersih**: kas + investasi − utang kartu kredit, dengan rincian Kas · Investasi · Kartu kredit di bawahnya (HP dan web).
+- **Angka besar diringkas otomatis** (`Rp4,1k`, `$6.7m`, `Rp7,2b`) hanya bila nominal penuh tidak muat.
+- **Laporan keuangan PDF** dengan rentang tanggal (default 30 hari terakhir): ringkasan, per kategori, per dompet, daftar transaksi. HP: Data & backup → Laporan keuangan. Web: Laporan → Ekspor PDF.
+- **Transaksi otomatis dari email** bank & e-wallet (IMAP + app password, dibaca di HP, tiap ±15 menit). Hasilnya draf yang dikonfirmasi; email tidak lewat server.
+- Chat AI: boleh ngobrol dan konsultasi keuangan umum (tetap seputar catatan, konsultasi, dan analisa riwayat), mengingat percakapan, fakta riwayat 6 bulan dan saldo per dompet. **Transfer antar dompet lewat chat** diperbaiki ("tf 50k dari BCA ke OVO", "kirim 100rb ke GoPay", "top up GoPay 200k"), memakai kurs untuk beda mata uang.
+- **Scan struk tidak lagi macet**: kegagalan OCR kini tertangani, setiap mesin AI punya batas waktu (Gemini Nano bisa menunggu tanpa akhir saat modelnya belum siap), foto diperkecil dan diputar sesuai EXIF, ada tahap proses dan tombol Batal.
+- UI: ikon Transaksi di navigasi kini solid; palet warna dompet lebih cerah (kuning baru); 2 dompet di Beranda = saldo tertinggi; detail dompet memakai satu FAB (Tambah transaksi + Transfer); hapus dompet pindah ke bawah form Ubah dompet; konten tidak lagi terpotong di atas bilah navigasi.
+
 ## [0.0.3] — pra-rilis
 
 - **Rupiah bisa berdesimal** (sampai 4 digit, untuk kripto/valas). **Tidak kompatibel dengan data 0.0.1/0.0.2**: satuan simpan IDR berubah, jadi data lama harus dihapus (HP dan server) sebelum memasang. Tampilan `Rp14.125.000` tidak berubah untuk angka bulat.

@@ -21,4 +21,5 @@ class AppGraph(context: Context) {
     val bareng = Bareng(prefs, db.dao(), http) { MemberProfile(repo.snapshot().profile?.name ?: "—") }
     val rates = RatesRepo(prefs)
     val chat = ChatEngine(prefs, http)
+    val emailDrafts = com.arthatis.wallet.email.EmailDraftStore(context)
 }

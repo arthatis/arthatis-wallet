@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.DocumentScanner
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.SwapHoriz
@@ -41,6 +42,7 @@ import com.arthatis.wallet.core.Tx
 import com.arthatis.wallet.core.Wallet
 import com.arthatis.wallet.core.dayOf
 import com.arthatis.wallet.core.formatMinor
+import com.arthatis.wallet.core.formatCompact
 import com.arthatis.wallet.core.monthBounds
 import com.arthatis.wallet.core.periodFlow
 import com.arthatis.wallet.core.totalBalance
@@ -119,11 +121,14 @@ fun HomeScreen(vm: AppViewModel) {
     val (from, until) = monthBounds(today)
     val flow = periodFlow(ledger.liveTxs, ledger.liveWallets.associateBy { it.id }, currency, rates, from, until)
     val total = totalBalance(ledger.liveWallets, ledger.txs, currency, rates)
+    val cash = com.arthatis.wallet.core.cashTotal(ledger.liveWallets, ledger.txs, currency, rates)
     val invested = com.arthatis.wallet.core.investmentTotal(ledger.liveWallets, ledger.txs, currency, rates)?.takeIf { it != 0L }
     val debt = com.arthatis.wallet.core.creditTotal(ledger.liveWallets, ledger.txs, currency, rates)?.takeIf { it != 0L }
-    val extras = listOfNotNull(
-        invested?.let { tr("Investasi ${formatMinor(it, currency)}", "Investments ${formatMinor(it, currency)}") },
-        debt?.let { tr("Kartu kredit ${formatMinor(it, currency)}", "Credit cards ${formatMinor(it, currency)}") },
+    // Breakdown under the net worth; only shown when there is more than cash.
+    val extras = if (invested == null && debt == null) "" else listOfNotNull(
+        cash?.let { tr("Kas ${formatCompact(it, currency)}", "Cash ${formatCompact(it, currency)}") },
+        invested?.let { tr("Investasi ${formatCompact(it, currency)}", "Investments ${formatCompact(it, currency)}") },
+        debt?.let { tr("Kartu kredit ${formatCompact(it, currency)}", "Credit cards ${formatCompact(it, currency)}") },
     ).joinToString(" · ")
     var filter by remember { mutableStateOf(0) }
     var dialOpen by remember { mutableStateOf(false) }
@@ -147,9 +152,20 @@ fun HomeScreen(vm: AppViewModel) {
                 Ollie(Pose.Wave, 40.dp)
             }
             AccessCard(vm)
+            val emailDrafts by vm.emailDrafts.collectAsState()
+            LaunchedEffect(Unit) { vm.loadEmailDrafts() }
+            if (emailDrafts.isNotEmpty()) AppCard(onClick = { vm.go(Route.EmailDrafts) }, padding = 16.dp) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Icon(Icons.Rounded.Email, null, tint = MaterialTheme.colorScheme.primary)
+                    Column(Modifier.weight(1f)) {
+                        Text(tr("${emailDrafts.size} transaksi dari email menunggu", "${emailDrafts.size} transactions from email waiting"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                        Hint(tr("Ketuk untuk periksa dan konfirmasi.", "Tap to review and confirm."))
+                    }
+                }
+            }
             BalanceHero(
                 total = total?.let { formatMinor(it, currency) } ?: "—",
-                subtitle = if (total == null) tr("Kurs belum tersedia. Ketuk Pengaturan → Mata uang & kurs.", "Rates unavailable. Open Settings → Currency & rates.") else tr("${ledger.liveWallets.size} dompet · total kas dalam $currency", "${ledger.liveWallets.size} wallets · cash total in $currency") + (if (extras.isEmpty()) "" else "\n$extras"),
+                subtitle = if (total == null) tr("Kurs belum tersedia. Ketuk Pengaturan → Mata uang & kurs.", "Rates unavailable. Open Settings → Currency & rates.") else tr("${ledger.liveWallets.size} dompet · dalam $currency", "${ledger.liveWallets.size} wallets · in $currency") + (if (extras.isEmpty()) "" else "\n$extras"),
                 statusChip = chip,
                 incomeLabel = tr("Masuk", "Income"), income = flow?.let { formatMinor(it.incomeMinor, currency, Sign.Plus) } ?: "—",
                 expenseLabel = tr("Keluar", "Expense"), expense = flow?.let { formatMinor(it.expenseMinor, currency, Sign.Minus) } ?: "—",
@@ -160,7 +176,8 @@ fun HomeScreen(vm: AppViewModel) {
                 AppChip("Bareng", filter == 2, { filter = 2 })
             }
             SectionTitle(tr("Dompet", "Wallets"), tr("Lihat semua", "See all"), { vm.selectTab(Tab.Wallets) })
-            val personal = ledger.liveWallets
+            // Phones show the two wallets with the highest balance (in the main currency); tablets show all.
+            val personal = if (wide) ledger.liveWallets else com.arthatis.wallet.core.walletsByBalance(ledger.liveWallets, ledger.txs, currency, rates)
             val shown = if (wide) personal else personal.take(2)
             if (filter != 2) WalletGrid(shown, ledger, vm, wide)
             if (filter != 1) groups.filter { it.status == "active" }.forEach { g -> SharedAsWallet(g, vm) }
@@ -177,7 +194,7 @@ fun HomeScreen(vm: AppViewModel) {
                 DialAction("Chat AI", Icons.Rounded.AutoAwesome) { vm.go(Route.Chat) },
                 DialAction(tr("Scan struk", "Scan receipt"), Icons.Rounded.DocumentScanner) { vm.go(Route.Receipt) },
             ),
-            open = dialOpen, onOpenChange = { dialOpen = it }, modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            open = dialOpen, onOpenChange = { dialOpen = it }, modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = LocalPageBottom.current).padding(16.dp),
         )
     }
 }
@@ -229,20 +246,21 @@ fun WalletDetailScreen(vm: AppViewModel, id: String) {
     val old = periodFlow(ledger.liveTxs, map, wallet.currency, rates, prev.first, prev.second)
     val txs = ledger.liveTxs.filter { it.walletId == id || it.toWalletId == id }
     val month = java.time.format.DateTimeFormatter.ofPattern("MMM", locale()).format(today)
-    var confirmDelete by remember { mutableStateOf(false) }
+    var dialOpen by remember { mutableStateOf(false) }
     val lastMo = tr("bln lalu", "last mo.")
     fun delta(now: Long?, before: Long?): String? {
         if (now == null || before == null || before == 0L) return null
         val pct = (now - before) * 100.0 / before
         return "${if (pct >= 0) "+" else "−"}${"%.1f".format(kotlin.math.abs(pct)).replace('.', ',')}% vs $lastMo"
     }
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
         TopBar(wallet.name, onBack = { vm.back() }, actions = { AppIconButton(Icons.Rounded.Edit, { vm.go(Route.EditWallet(wallet.id)) }, description = tr("Ubah dompet", "Edit wallet")) })
         Page {
             AppCard(padding = 20.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Hint(tr("Saldo ${wallet.name}", "${wallet.name} balance"))
-                    Text(formatMinor(walletBalance(wallet, ledger.txs), wallet.currency), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
+                    FitAmount(formatMinor(walletBalance(wallet, ledger.txs), wallet.currency), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
                     Hint(walletMeta(wallet))
                 }
             }
@@ -252,18 +270,19 @@ fun WalletDetailScreen(vm: AppViewModel, id: String) {
             }
             SectionTitle(tr("Transaksi ${wallet.name}", "${wallet.name} transactions"))
             if (txs.isEmpty()) EmptyState(Pose.Sleepy, tr("Belum ada transaksi", "No transactions yet"), tr("Transaksi di dompet ini akan muncul di sini.", "Transactions in this wallet will show up here."), ollieSize = 96.dp) else TxList(txs, ledger, vm)
-            AppButton(tr("Transfer ke dompet lain", "Transfer to another wallet"), { vm.go(Route.Transfer(wallet.id)) }, Modifier.fillMaxWidth(), style = BtnStyle.Tonal, icon = Icons.Rounded.SwapHoriz)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppButton(tr("Tambah transaksi", "Add transaction"), { vm.go(Route.AddTx(walletId = wallet.id)) }, Modifier.weight(1f), style = BtnStyle.Outlined, size = BtnSize.S, icon = Icons.Rounded.Add)
-                AppButton(tr("Hapus", "Delete"), { confirmDelete = true }, Modifier.weight(1f), style = BtnStyle.Outlined, size = BtnSize.S, icon = Icons.Rounded.Delete)
-            }
-            Hint(tr("Mata uang dompet tidak bisa diubah setelah dibuat.", "A wallet's currency can't be changed after it's created."))
+            Hint(tr("Mata uang dompet tidak bisa diubah setelah dibuat. Hapus dompet ada di Ubah dompet.", "A wallet's currency can't be changed after it's created. Delete is in Edit wallet."))
         }
     }
-    if (confirmDelete) ConfirmDialog(
-        tr("Hapus ${wallet.name}?", "Delete ${wallet.name}?"),
-        tr("Dompet dan ${txs.size} transaksinya dihapus dari perangkat ini dan perangkat tersinkron.", "The wallet and its ${txs.size} transactions are removed from this device and synced devices."),
-        tr("Hapus", "Delete"), { confirmDelete = false }) { confirmDelete = false; vm.deleteWallet(wallet); vm.back() }
+        // One FAB for both actions, like Home.
+        if (dialOpen) Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)).clickable(interactionSource = null, indication = null) { dialOpen = false })
+        SpeedDialFab(
+            actions = listOfNotNull(
+                DialAction(tr("Tambah transaksi", "Add transaction"), Icons.Rounded.Edit) { vm.go(Route.AddTx(walletId = wallet.id)) },
+                if (ledger.liveWallets.size > 1) DialAction(tr("Transfer ke dompet lain", "Transfer to another wallet"), Icons.Rounded.SwapHoriz) { vm.go(Route.Transfer(wallet.id)) } else null,
+            ),
+            open = dialOpen, onOpenChange = { dialOpen = it }, modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = LocalPageBottom.current).padding(16.dp),
+        )
+    }
 }
 
 @Composable

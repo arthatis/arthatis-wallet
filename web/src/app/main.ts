@@ -1,13 +1,14 @@
+import { buildReport, printReport } from "./report";
 import { aiSettings, loadApiKey, reply, saveAiSettings, saveApiKey } from "./ai";
 import { approveMember, contribute, createInvite, groupDetailPage, groupsPage, listGroups, loadGroup, vote, type GroupRow, type GroupView } from "./bareng";
-import { ENTITY, CURRENCIES, evaluate, formatMinor, groupAmount, newId, pairKey } from "./model";
+import { ENTITY, CURRENCIES, buildTransfer, evaluate, formatMinor, groupAmount, newId, pairKey } from "./model";
 import * as A from "./admin";
 import * as P from "./pages";
 import { buildRates, cachedRates, fetchRates } from "./rates";
 import { session, onChange, type LinkState } from "./session";
 import QRCode from "qrcode";
 import pkg from "../../package.json";
-import { bindAmountInputs, $, applyTheme, confirmDialog, dialog, esc, field, icon, lang, select, setLang, setTheme, t, theme, toast } from "./ui";
+import { bindAmountInputs, fitAmounts, $, applyTheme, confirmDialog, dialog, esc, field, icon, lang, select, setLang, setTheme, t, theme, toast } from "./ui";
 
 type Page = "dashboard" | "transactions" | "wallets" | "bareng" | "reports" | "ai" | "data" | "settings" | "security" | "admin";
 const NAV: [Page, string, string, string][] = [
@@ -96,6 +97,8 @@ function titleOf(p: Page) {
   const n = NAV.find((x) => x[0] === p)!; return t(n[1], n[2]);
 }
 
+window.addEventListener("resize", () => fitAmounts());
+
 function render() {
   if (!session.linked) return;
   const c = ctx();
@@ -103,6 +106,7 @@ function render() {
   root.innerHTML = `<div class="shell"><aside class="sidebar" aria-label="Menu"><div class="logo"><img src="/design/wave.png" alt="">Arthatis</div>${navItems().map(([id, a, b, ic]) => `<button class="nav" data-act="go" data-page="${id}" ${active === id ? 'aria-current="page"' : ""}>${icon(ic)}<span>${t(a, b)}</span></button>`).join("")}<span class="spacer"></span><div class="side-footer"><b class="small">${t("E2EE aktif", "E2EE on")}</b><span class="muted small">${t(`${sessionCount} sesi web · v${pkg.version}`, `${sessionCount} web sessions · v${pkg.version}`)}</span></div></aside>
     <div class="main"><header class="topbar"><h1>${esc(titleOf(page))}</h1><span class="pill ${session.online ? "" : "warn"}"><i class="dot"></i>${session.online ? t("Tersinkron", "Synced") : t("Offline", "Offline")}</span><button class="btn outlined sm" data-act="logout">${icon("logout")}${t("Putuskan", "Unlink")}</button></header><main class="content" id="page">${blockedBanner()}${pageBody(c)}</main></div></div>`;
   wire(c);
+  fitAmounts();
 }
 
 function pageBody(c: P.Ctx): string {
@@ -216,6 +220,15 @@ function wire(c: P.Ctx) {
     "admin-resume": async (el) => { if (await A.vaultAction("resume", el.dataset.id!)) await refreshAdmin(); },
     "admin-delete": async (el) => { if (await A.vaultAction("delete", el.dataset.id!)) await refreshAdmin(); },
     "chat-send": () => void sendChat(c),
+    "export-pdf": () => {
+      const from = $<HTMLInputElement>("#rep-from")?.value ?? ""; const to = $<HTMLInputElement>("#rep-to")?.value ?? "";
+      P.reportRange.from = from; P.reportRange.to = to;
+      const a = Date.parse(`${from}T00:00:00Z`), b = Date.parse(`${to}T00:00:00Z`);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || a > b) { toast(t("Tanggal awal harus sebelum tanggal akhir.", "The start date must be before the end date.")); return; }
+      const r = buildReport(c.ledger, c.currency, c.rates, a, b + 86_400_000);
+      if (!r) { toast(t("Kurs belum tersedia untuk semua dompet.", "Rates are missing for some wallets.")); return; }
+      if (!printReport(r, c.ledger)) toast(t("Izinkan pop-up untuk mencetak laporan.", "Allow pop-ups to print the report."));
+    },
     "save-ai": async () => {
       const s = aiSettings(); s.server = $<HTMLInputElement>("#ai-server")!.checked; s.cloud = $<HTMLInputElement>("#ai-cloud")!.checked;
       s.provider = ($<HTMLSelectElement>("#f-provider")?.value ?? s.provider) as typeof s.provider; s.model = $<HTMLInputElement>("#f-model")?.value.trim() ?? s.model;
@@ -254,8 +267,13 @@ async function sendChat(c: P.Ctx) {
   if (r.type === "answer") chat.push({ me: false, html: esc(r.text) });
   else if (r.type === "draft") {
     const d = r.draft; const w = c.ledger.wallets.find((x) => x.id === d.walletId);
-    const ok = await confirmDialog(t("Simpan draf ini?", "Save this draft?"), `${formatMinor(d.amountMinor, w?.currency ?? "IDR", d.kind === "income" ? "plus" : "minus")} · ${d.note}`, t("Simpan", "Save"));
-    if (ok) {
+    const toW = d.toWalletId ? c.ledger.wallets.find((x) => x.id === d.toWalletId) : undefined;
+    const ok = await confirmDialog(t("Simpan draf ini?", "Save this draft?"), d.kind === "transfer" ? `${t("Transfer", "Transfer")} ${formatMinor(d.amountMinor, w?.currency ?? "IDR")} · ${w?.name ?? "?"} → ${toW?.name ?? "?"}` : `${formatMinor(d.amountMinor, w?.currency ?? "IDR", d.kind === "income" ? "plus" : "minus")} · ${d.note}`, t("Simpan", "Save"));
+    if (ok && d.kind === "transfer") {
+      const tx = w && toW ? buildTransfer(w, toW, d.amountMinor, c.rates, null, Date.now()) : null;
+      if (tx) { session.put(ENTITY.tx, { ...tx, note: d.note }); chat.push({ me: false, html: t("Tersimpan ✓", "Saved ✓") }); }
+      else chat.push({ me: false, html: t("Kurs belum tersedia. Buat transfer dari menu Dompet dengan kurs manual.", "Rate unavailable. Make the transfer from Wallets with a manual rate.") });
+    } else if (ok) {
       session.put(ENTITY.tx, { id: newId(), walletId: d.walletId, toWalletId: null, categoryId: d.categoryId, kind: d.kind, amountMinor: d.amountMinor, toAmountMinor: null, rate: null, note: d.note, occurredAt: Date.now(), recurringId: null, updatedAt: 0, deletedAt: null });
       chat.push({ me: false, html: t("Tersimpan ✓", "Saved ✓") });
     } else chat.push({ me: false, html: t("Draf dibuang.", "Draft discarded.") });

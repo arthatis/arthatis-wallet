@@ -9,7 +9,7 @@ val ledgerJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
 /** Icon keys a wallet can use (the phone and the web draw them from the same list) and the colour palette. */
 val walletIconKeys = listOf("wallet", "bank", "cash", "phone", "card", "savings", "trending", "gift", "home", "car", "shopping", "coin")
-val walletColors = listOf("#1B6D35", "#006A6A", "#0061A4", "#6750A4", "#984061", "#BA1A1A", "#8B5000", "#6D5E00", "#4A6267", "#5C5F5C")
+val walletColors = listOf("#2E7D32", "#00897B", "#1E88E5", "#3949AB", "#8E24AA", "#D81B60", "#E53935", "#FB8C00", "#FDD835", "#6D4C41")
 
 /** Icon for wallets saved before icons existed. */
 fun legacyIcon(kind: WalletKind): String = when (kind) {

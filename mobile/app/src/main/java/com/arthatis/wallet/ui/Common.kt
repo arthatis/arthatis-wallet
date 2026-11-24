@@ -24,14 +24,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
+/** Space a page must leave at its bottom for what is drawn over it (the app nav bar on tabs, the system bar elsewhere). */
+val LocalPageBottom = androidx.compose.runtime.staticCompositionLocalOf { 0.dp }
+
 /**
  * Scrollable page body with the design's 16 dp gutter and 16 dp rhythm.
  * With [center] the content is centred both ways in the space below the app bar (empty states); it still scrolls if it grows.
  */
 @Composable
 fun Page(modifier: Modifier = Modifier, bottomSpace: Boolean = true, center: Boolean = false, content: @Composable () -> Unit) {
+    val bottom = LocalPageBottom.current
     BoxWithConstraints(modifier.fillMaxSize()) {
-        val viewport = maxHeight
+        val viewport = maxHeight - bottom
         Column(
             Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                 .then(if (center) Modifier.heightIn(min = viewport) else Modifier)
@@ -40,7 +44,7 @@ fun Page(modifier: Modifier = Modifier, bottomSpace: Boolean = true, center: Boo
             horizontalAlignment = if (center) Alignment.CenterHorizontally else Alignment.Start,
         ) {
             content()
-            if (bottomSpace && !center) Spacer(Modifier.height(96.dp))
+            Spacer(Modifier.height(bottom + if (bottomSpace && !center) 88.dp else 0.dp))
         }
     }
 }

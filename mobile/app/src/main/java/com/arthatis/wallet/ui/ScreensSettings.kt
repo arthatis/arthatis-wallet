@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Email
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.DarkMode
@@ -91,6 +92,7 @@ fun SettingsScreen(vm: AppViewModel) {
                 }
             }
             NavRow(Icons.Rounded.AutoAwesome, tr("AI & privasi", "AI & privacy"), "On-device") { vm.go(Route.AiSettings) }
+            NavRow(Icons.Rounded.Email, tr("Transaksi dari email", "Transactions from email"), if (vm.prefs.emailEnabled) tr("Aktif", "On") else tr("Nonaktif", "Off")) { vm.go(Route.EmailSync) }
             NavRow(Icons.Rounded.Storage, tr("Data & backup", "Data & backup"), if (settings.lastExportAt > 0) shortDate(com.arthatis.wallet.core.dayOf(settings.lastExportAt)) else null) { vm.go(Route.DataBackup) }
             NavRow(Icons.Rounded.Phonelink, tr("Sesi web", "Web sessions"), if (settings.connected) tr("$sessions aktif", "$sessions active") else tr("Butuh server", "Needs server")) { vm.go(Route.Security) }
             NavRow(Icons.Rounded.Lock, tr("Keamanan & enkripsi", "Security & encryption"), tr("E2EE aktif", "E2EE on")) { vm.go(Route.Security) }

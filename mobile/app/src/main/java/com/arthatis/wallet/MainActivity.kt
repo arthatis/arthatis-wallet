@@ -27,6 +27,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent { ArthatisApp(vm) { pick.launch(arrayOf("*/*")) } }
+        handle(intent)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handle(intent)
+    }
+
+    /** The email notification opens the list of email drafts. */
+    private fun handle(intent: android.content.Intent?) {
+        if (intent?.getStringExtra("open") == "email-drafts") { vm.openEmailDrafts(); intent.removeExtra("open") }
     }
 
     override fun onStart() {

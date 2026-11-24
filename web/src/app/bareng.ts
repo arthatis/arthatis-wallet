@@ -81,7 +81,7 @@ const log = async (v: GroupView, text: string) => {
 };
 const myName = () => session.ledger().profile?.name ?? "—";
 /** Rp1.000.000 for IDR; other currencies keep 1.000.000 minor units. */
-export const withdrawThreshold = (currency: string) => (currency === "IDR" ? toMinor(1_000_000, "IDR") : 1_000_000);
+export const withdrawThreshold = (currency: string) => toMinor(currency === "IDR" ? 1_000_000 : 10_000, currency);
 
 export async function contribute(v: GroupView, withdraw: boolean): Promise<boolean> {
   const m = v.row.meta!;

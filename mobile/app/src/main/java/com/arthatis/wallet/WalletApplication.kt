@@ -22,5 +22,6 @@ class WalletApplication : Application() {
             .createNotificationChannel(NotificationChannel("reminders", if (lang == "en") "Reminders" else "Pengingat", NotificationManager.IMPORTANCE_DEFAULT))
         val request = PeriodicWorkRequestBuilder<ReminderWorker>(1, TimeUnit.DAYS).build()
         WorkManager.getInstance(this).enqueueUniquePeriodicWork("reminders", ExistingPeriodicWorkPolicy.UPDATE, request)
+        com.arthatis.wallet.email.EmailWorker.schedule(this, graph.prefs.emailEnabled)
     }
 }

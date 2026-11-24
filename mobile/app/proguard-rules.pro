@@ -13,3 +13,14 @@
 # Crash reports stay readable.
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# Jakarta Mail (Angus) finds its IMAP provider and activation handlers by name through META-INF files.
+-keep class org.eclipse.angus.mail.** { *; }
+-keep class jakarta.mail.** { *; }
+-keep class jakarta.activation.** { *; }
+-keep class org.eclipse.angus.activation.** { *; }
+-dontwarn java.awt.**
+-dontwarn javax.security.sasl.**
+-dontwarn javax.naming.**
+-dontwarn org.eclipse.angus.**
+-dontwarn jakarta.**

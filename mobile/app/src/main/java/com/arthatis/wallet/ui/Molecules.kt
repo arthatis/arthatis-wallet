@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.DirectionsCar
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Receipt
 import androidx.compose.material.icons.rounded.LocalGasStation
 import androidx.compose.material.icons.rounded.MedicalServices
 import androidx.compose.material.icons.rounded.Movie
@@ -46,11 +47,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
@@ -117,9 +122,25 @@ fun AppCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, paddin
 
 @Composable
 private fun LeadingIcon(icon: ImageVector, size: Dp, container: Color = MaterialTheme.colorScheme.secondaryContainer, tint: Color? = null) {
-    Box(Modifier.size(size).clip(RoundedCornerShape(Radius.medium)).background(tint?.copy(alpha = 0.18f) ?: container), contentAlignment = Alignment.Center) {
-        Icon(icon, null, Modifier.size(24.dp), tint = tint ?: MaterialTheme.colorScheme.onSecondaryContainer)
+    // Light colours (yellow) get a darker glyph so the icon stays readable on its pale tile.
+    val glyph = tint?.let { if (it.luminance() > 0.5f) androidx.compose.ui.graphics.lerp(it, Color.Black, 0.45f) else it }
+    Box(Modifier.size(size).clip(RoundedCornerShape(Radius.medium)).background(tint?.copy(alpha = 0.22f) ?: container), contentAlignment = Alignment.Center) {
+        Icon(icon, null, Modifier.size(24.dp), tint = glyph ?: MaterialTheme.colorScheme.onSecondaryContainer)
     }
+}
+
+/**
+ * Money text that never breaks a layout: shows the full amount when it fits in one line, otherwise the compact form
+ * (`Rp4,1k`, `$6.7m`, `Rp7,2b`). Non-money strings are shown as they are.
+ */
+@Composable
+fun FitAmount(text: String, modifier: Modifier = Modifier, style: androidx.compose.ui.text.TextStyle, color: Color) {
+    val compact = remember(text) { com.arthatis.wallet.core.compactOf(text) }
+    var short by remember(text) { androidx.compose.runtime.mutableStateOf(false) }
+    Text(
+        if (short && compact != null) compact else text, modifier, style = style, color = color, maxLines = 1, softWrap = false,
+        overflow = TextOverflow.Clip, onTextLayout = { if (!short && compact != null && it.hasVisualOverflow) short = true },
+    )
 }
 
 /** M/TxRow: 40 leading icon + headline + supporting + amount (primary for income). */
@@ -132,7 +153,7 @@ fun TxRow(title: String, supporting: String, amount: String, income: Boolean, ic
                 Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(supporting, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text(amount, style = MaterialTheme.typography.titleSmall, color = if (income) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+            FitAmount(amount, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleSmall, color = if (income) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -148,7 +169,7 @@ fun WalletCard(name: String, meta: String, extra: String?, balance: String, icon
                 Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (extra != null) Text(extra, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Text(balance, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            FitAmount(balance, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -172,7 +193,7 @@ fun StatCard(label: String, value: String, delta: String? = null, modifier: Modi
     AppCard(modifier, padding = 0.dp) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+            FitAmount(value, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             if (delta != null) Text(delta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
         }
     }
@@ -225,7 +246,7 @@ fun TopBar(title: String, modifier: Modifier = Modifier, onBack: (() -> Unit)? =
 enum class Tab(val labelId: String, val labelEn: String, val icon: ImageVector) {
     Home("Beranda", "Home", Icons.Rounded.Home),
     Wallets("Dompet", "Wallets", Icons.Rounded.AccountBalanceWallet),
-    Transactions("Transaksi", "Transactions", Icons.AutoMirrored.Rounded.ReceiptLong),
+    Transactions("Transaksi", "Transactions", Icons.Rounded.Receipt),
     Bareng("Bareng", "Together", Icons.Rounded.Groups),
     Settings("Pengaturan", "Settings", Icons.Rounded.Settings),
 }
@@ -264,17 +285,17 @@ fun BalanceHero(total: String, subtitle: String, statusChip: String, incomeLabel
                 Text(statusChip, style = MaterialTheme.typography.labelSmall, color = scheme.onSurface)
             }
         }
-        Text(total, style = MaterialTheme.typography.headlineLarge, color = scheme.onPrimaryContainer)
+        FitAmount(total, style = MaterialTheme.typography.headlineLarge, color = scheme.onPrimaryContainer)
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = scheme.onPrimaryContainer)
         Box(Modifier.fillMaxWidth().height(1.dp).background(scheme.outlineVariant))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(incomeLabel, style = MaterialTheme.typography.bodySmall, color = scheme.onPrimaryContainer)
-                Text(income, style = MaterialTheme.typography.titleMedium, color = scheme.primary)
+                FitAmount(income, style = MaterialTheme.typography.titleMedium, color = scheme.primary)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(expenseLabel, style = MaterialTheme.typography.bodySmall, color = scheme.onPrimaryContainer)
-                Text(expense, style = MaterialTheme.typography.titleMedium, color = scheme.onPrimaryContainer)
+                FitAmount(expense, style = MaterialTheme.typography.titleMedium, color = scheme.onPrimaryContainer)
             }
         }
     }
@@ -292,7 +313,7 @@ fun SharedWalletCard(
                 Text(name, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                 Badge(kindLabel, container = MaterialTheme.colorScheme.tertiaryContainer, content = MaterialTheme.colorScheme.onTertiaryContainer)
             }
-            Text(amount, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+            FitAmount(amount, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
             Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             ProgressBar(fraction)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -16,8 +16,8 @@ android {
         applicationId = "com.arthatis.wallet"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.0.3"
+        versionCode = 4
+        versionName = "0.0.4"
     }
 
     // Release signing comes from mobile/keystore.properties (git-ignored: storeFile, storePassword, keyAlias, keyPassword).
@@ -82,6 +82,7 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             pickFirsts += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
             excludes += "META-INF/versions/**/OSGI-INF/MANIFEST.MF"
+            excludes += "/META-INF/{NOTICE.md,LICENSE.md}"
         }
     }
 }
@@ -120,5 +121,7 @@ dependencies {
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta4")
+    // IMAP for bank/e-wallet notification emails, read on the phone only (Jakarta Mail, EPL-2.0/GPL-2.0+CE).
+    implementation("org.eclipse.angus:angus-mail:2.0.3")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

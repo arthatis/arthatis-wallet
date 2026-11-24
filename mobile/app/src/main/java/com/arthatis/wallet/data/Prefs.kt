@@ -122,6 +122,42 @@ class Prefs(context: Context) : SecretStore {
         get() = secret("deviceKeys")?.let { runCatching { Crypto.DeviceKeys.decode(it) }.getOrNull() }
         set(v) = putSecret("deviceKeys", v?.encode())
 
+    // --- Email (IMAP) auto-tracking: settings stay on this phone, never synced ------------------
+
+    var emailEnabled: Boolean
+        get() = sp.getBoolean("email.enabled", false)
+        set(v) = sp.edit().putBoolean("email.enabled", v).apply()
+    var emailHost: String
+        get() = sp.getString("email.host", "imap.gmail.com")!!
+        set(v) = sp.edit().putString("email.host", v.trim()).apply()
+    var emailPort: Int
+        get() = sp.getInt("email.port", 993)
+        set(v) = sp.edit().putInt("email.port", v).apply()
+    var emailUser: String
+        get() = sp.getString("email.user", "")!!
+        set(v) = sp.edit().putString("email.user", v.trim()).apply()
+    /** App password, wrapped by the Keystore like every other secret. */
+    var emailPassword: String?
+        get() = secret("emailPassword")?.let { String(it) }
+        set(v) = putSecret("emailPassword", v?.toByteArray())
+    /** Watched sender fragments, one per line. */
+    var emailSenders: List<String>
+        get() = sp.getString("email.senders", null)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: com.arthatis.wallet.core.defaultEmailSenders
+        set(v) = sp.edit().putString("email.senders", v.joinToString("\n")).apply()
+    /** IMAP UIDVALIDITY + last UID seen, so each email is read once. */
+    var emailUidValidity: Long
+        get() = sp.getLong("email.uidValidity", 0)
+        set(v) = sp.edit().putLong("email.uidValidity", v).apply()
+    var emailLastUid: Long
+        get() = sp.getLong("email.lastUid", 0)
+        set(v) = sp.edit().putLong("email.lastUid", v).apply()
+    var emailLastCheck: Long
+        get() = sp.getLong("email.lastCheck", 0)
+        set(v) = sp.edit().putLong("email.lastCheck", v).apply()
+    var emailLastError: String?
+        get() = sp.getString("email.lastError", null)
+        set(v) = sp.edit().putString("email.lastError", v).apply()
+
     /** Remove everything tied to a server connection (keeps theme/language). */
     fun disconnect() {
         token = null
