@@ -2,7 +2,7 @@
 
 Versi mengikuti [SemVer](https://semver.org). Selama `0.0.x` ini adalah pra-rilis: belum di Play Store, belum diaudit, dan APK ditandatangani dengan kunci debug.
 
-## [0.0.3] — pra-rilis (belum dirilis)
+## [0.0.3] — pra-rilis
 
 - **Rupiah bisa berdesimal** (sampai 4 digit, untuk kripto/valas). **Tidak kompatibel dengan data 0.0.1/0.0.2**: satuan simpan IDR berubah, jadi data lama harus dihapus (HP dan server) sebelum memasang. Tampilan `Rp14.125.000` tidak berubah untuk angka bulat.
 - Dompet bisa diubah (nama, ikon, warna, saldo awal); tipe dan mata uang terkunci.
