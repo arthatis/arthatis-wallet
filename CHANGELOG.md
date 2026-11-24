@@ -2,7 +2,7 @@
 
 Versi mengikuti [SemVer](https://semver.org). Selama `0.0.x` ini adalah pra-rilis: belum di Play Store, belum diaudit, dan APK ditandatangani dengan kunci debug.
 
-## [0.0.4] — pra-rilis (belum dirilis)
+## [0.0.4] — pra-rilis
 
 - **Semua mata uang 4 desimal** (USD/SGD/MYR/EUR juga, bukan hanya Rupiah). Tampilan non-IDR minimal 2 digit (`$5.00`, `$1,060.7925`). **Tidak kompatibel dengan data 0.0.3** untuk dompet non-IDR: hapus data HP dan server sebelum memasang.
 - **Total saldo = kekayaan bersih**: kas + investasi − utang kartu kredit, dengan rincian Kas · Investasi · Kartu kredit di bawahnya (HP dan web).
