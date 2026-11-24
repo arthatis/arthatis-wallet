@@ -141,7 +141,8 @@ fun OnboardingScreen(vm: AppViewModel) {
     var name by remember { mutableStateOf("") }
     var currency by remember { mutableStateOf("IDR") }
     var walletName by remember { mutableStateOf("") }
-    var kind by remember { mutableStateOf(WalletKind.tunai) }
+    var icon by remember { mutableStateOf("wallet") }
+    var color by remember { mutableStateOf<String?>(null) }
     var opening by remember { mutableStateOf("") }
     var mode by remember { mutableStateOf(ServerMode.None) }
     var url by remember { mutableStateOf("") }
@@ -164,8 +165,8 @@ fun OnboardingScreen(vm: AppViewModel) {
             }
             Step("3 · ${tr("Wallet pertama", "First wallet")}") {
                 AppTextField(walletName, { walletName = it }, tr("Nama dompet", "Wallet name"), supporting = tr("Contoh: Tunai, BCA, GoPay.", "Example: Cash, BCA, GoPay."))
-                ChipRow { listOf(WalletKind.tunai, WalletKind.rekening, WalletKind.ewallet).forEach { k -> AppChip(walletKindLabel(k), kind == k, { kind = k }) } }
-                AppTextField(opening, { opening = it }, tr("Saldo awal (opsional)", "Opening balance (optional)"), keyboard = KeyboardType.Decimal, supporting = tr("Dalam $currency.", "In $currency."))
+                WalletStyleFields(icon, { icon = it }, color, { color = it })
+                AmountField(opening, { opening = it }, currency, tr("Saldo awal (opsional)", "Opening balance (optional)"), supporting = tr("Dalam $currency.", "In $currency."))
             }
             Step("4 · ${tr("Hubungkan server", "Connect a server")}") {
                 ServerPicker(mode, { mode = it; tested = null }, url, { url = it; tested = null }, tested, {
@@ -177,7 +178,7 @@ fun OnboardingScreen(vm: AppViewModel) {
             AppButton(tr("Selesai & mulai", "Finish & start"), {
                 busy = true
                 val minor = evaluateExpression(opening)?.let { runCatching { toMinor(it, currency) }.getOrNull() } ?: 0L
-                vm.finishOnboarding(name.trim(), currency, walletName.trim().ifBlank { walletDefault }, kind, minor, mode, url.trim().trimEnd('/'), gate.email.trim(), gate.code)
+                vm.finishOnboarding(name.trim(), currency, walletName.trim().ifBlank { walletDefault }, WalletKind.biasa, icon, color, minor, mode, url.trim().trimEnd('/'), gate.email.trim(), gate.code)
             }, Modifier.fillMaxWidth(), enabled = ready, loading = busy)
         }
     }

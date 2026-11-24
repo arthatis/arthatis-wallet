@@ -14,7 +14,7 @@ import java.net.URL
 
 /** Daily rates straight from the phone to api.frankfurter.dev (v1). Nothing passes through our server. */
 class RatesRepo(private val prefs: Prefs) {
-    private val foreign = listOf("USD", "SGD")
+    private val foreign = listOf("USD", "SGD", "MYR", "EUR")
 
     private fun cached(): Map<String, BigDecimal> =
         prefs.cachedRates.split(';').mapNotNull { part ->

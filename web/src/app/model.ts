@@ -1,10 +1,10 @@
 // Port of the Kotlin `core` model/ledger. Field names match the JSON the phone writes.
-export type WalletKind = "rekening" | "tunai" | "ewallet" | "investasi";
+export type WalletKind = "rekening" | "tunai" | "ewallet" | "investasi" | "biasa" | "kartu";
 export type EntryKind = "expense" | "income" | "transfer";
 export type Frequency = "daily" | "weekly" | "monthly" | "yearly";
 
 interface Syncable { id: string; updatedAt: number; deletedAt: number | null }
-export interface Wallet extends Syncable { name: string; kind: WalletKind; currency: string; openingMinor: number; position: number }
+export interface Wallet extends Syncable { name: string; kind: WalletKind; currency: string; openingMinor: number; position: number; icon?: string | null; color?: string | null }
 export interface Category extends Syncable { key: string | null; name: string; kind: EntryKind; color: string; hidden: boolean; position: number }
 export interface Tx extends Syncable {
   walletId: string; toWalletId: string | null; categoryId: string | null; kind: EntryKind; amountMinor: number;
@@ -25,16 +25,59 @@ export interface Ledger {
 }
 export const emptyLedger = (): Ledger => ({ wallets: [], categories: [], txs: [], recurring: [], overrides: [], budgets: [], profile: null });
 
-export const CURRENCIES = [{ code: "IDR", scale: 0, symbol: "Rp" }, { code: "USD", scale: 2, symbol: "$" }, { code: "SGD", scale: 2, symbol: "S$" }];
-const info = (code: string) => CURRENCIES.find((c) => c.code === code) ?? { code, scale: 2, symbol: code };
+/** group = thousands separator, decimal = fraction mark. IDR and EUR use `.` / `,`; the rest `,` / `.`. Same as the phone. */
+export const CURRENCIES = [
+  { code: "IDR", scale: 0, symbol: "Rp", group: ".", decimal: "," }, { code: "USD", scale: 2, symbol: "$", group: ",", decimal: "." },
+  { code: "SGD", scale: 2, symbol: "S$", group: ",", decimal: "." }, { code: "MYR", scale: 2, symbol: "RM", group: ",", decimal: "." },
+  { code: "EUR", scale: 2, symbol: "\u20ac", group: ".", decimal: "," },
+];
+const info = (code: string) => CURRENCIES.find((c) => c.code === code) ?? { code, scale: 2, symbol: code, group: ",", decimal: "." };
+
+export const WALLET_ICONS = ["wallet", "bank", "cash", "phone", "card", "savings", "trending", "gift", "home", "car", "shopping", "coin"];
+export const WALLET_COLORS = ["#1B6D35", "#006A6A", "#0061A4", "#6750A4", "#984061", "#BA1A1A", "#8B5000", "#6D5E00", "#4A6267", "#5C5F5C"];
+const LEGACY_ICON: Record<string, string> = { rekening: "bank", tunai: "cash", ewallet: "phone", investasi: "trending", kartu: "card", biasa: "wallet" };
+export const walletIconKey = (w: Wallet) => w.icon ?? LEGACY_ICON[w.kind] ?? "wallet";
+
+/** Groups every run of digits in [raw] (the whole expression, so `12000+5000` works too). The decimal mark is left as typed. */
+export function groupAmount(raw: string, currency: string): string {
+  const { group } = info(currency); const dec = info(currency).decimal;
+  let out = ""; let i = 0;
+  while (i < raw.length) {
+    if (/\d/.test(raw[i]!)) {
+      let j = i; while (j < raw.length && /\d/.test(raw[j]!)) j++;
+      const inFraction = i > 0 && raw[i - 1] === dec;
+      const run = raw.slice(i, j);
+      out += inFraction ? run : run.replace(/\B(?=(\d{3})+(?!\d))/g, group);
+      i = j;
+    } else { out += raw[i]; i++; }
+  }
+  return out;
+}
+
+/** A stored amount as it should appear in an input: grouped, with the currency's decimal mark. */
+export function amountText(minor: number, currency: string): string {
+  const { scale, decimal } = info(currency);
+  if (!minor) return "";
+  let plain = (minor / 10 ** scale).toFixed(scale);
+  if (scale) plain = plain.replace(/\.?0+$/, "");
+  return groupAmount(plain.replace(".", decimal), currency);
+}
+
+/** Reads text typed with the currency's own separators: `1,234.50` (USD), `1.234,50` (EUR), `1.234.567` (IDR). */
+export function evaluateAmount(raw: string, currency: string): number | null {
+  const { group, decimal } = info(currency);
+  const plain = raw.split(group).join("").split(decimal).join(".");
+  return evaluate(plain);
+}
 
 export type Sign = "none" | "plus" | "minus";
-/** `Rp14.125.000`, `$60,79`, `+Rp8.500.000`, `−Rp25.000` — same as the phone. */
+/** `Rp14.125.000`, `$1,060.79`, `\u20ac1.060,79`, `+Rp8.500.000`, `−Rp25.000` — same as the phone. */
 export function formatMinor(minor: number, currency: string, sign: Sign = "none"): string {
   const { scale, symbol } = info(currency);
   const abs = Math.abs(minor);
-  const whole = Math.floor(abs / 10 ** scale).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  const frac = scale ? "," + (abs % 10 ** scale).toString().padStart(scale, "0") : "";
+  const { group, decimal } = info(currency);
+  const whole = Math.floor(abs / 10 ** scale).toString().replace(/\B(?=(\d{3})+(?!\d))/g, group);
+  const frac = scale ? decimal + (abs % 10 ** scale).toString().padStart(scale, "0") : "";
   const prefix = sign === "plus" ? "+" : sign === "minus" ? "−" : minor < 0 ? "−" : "";
   return `${prefix}${symbol}${whole}${frac}`;
 }
@@ -95,9 +138,14 @@ export function balance(w: Wallet, txs: Tx[]): number {
   return t;
 }
 
-export function totalBalance(l: Ledger, currency: string, rates: Rates): number | null {
+/** Cash total: credit cards and investments are kept out and shown apart. */
+export const totalBalance = (l: Ledger, currency: string, rates: Rates) => sumKinds(l, currency, rates, (w) => w.kind !== "kartu" && w.kind !== "investasi");
+export const investmentTotal = (l: Ledger, currency: string, rates: Rates) => sumKinds(l, currency, rates, (w) => w.kind === "investasi");
+/** Negative = debt. */
+export const creditTotal = (l: Ledger, currency: string, rates: Rates) => sumKinds(l, currency, rates, (w) => w.kind === "kartu");
+function sumKinds(l: Ledger, currency: string, rates: Rates, pick: (w: Wallet) => boolean): number | null {
   let t = 0;
-  for (const w of live(l.wallets)) { const v = rates.convert(balance(w, l.txs), w.currency, currency); if (v === null) return null; t += v; }
+  for (const w of live(l.wallets).filter(pick)) { const v = rates.convert(balance(w, l.txs), w.currency, currency); if (v === null) return null; t += v; }
   return t;
 }
 

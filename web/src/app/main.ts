@@ -1,13 +1,13 @@
 import { aiSettings, loadApiKey, reply, saveAiSettings, saveApiKey } from "./ai";
 import { approveMember, contribute, createInvite, groupDetailPage, groupsPage, listGroups, loadGroup, vote, type GroupRow, type GroupView } from "./bareng";
-import { ENTITY, CURRENCIES, evaluate, formatMinor, newId, pairKey } from "./model";
+import { ENTITY, CURRENCIES, evaluate, formatMinor, groupAmount, newId, pairKey } from "./model";
 import * as A from "./admin";
 import * as P from "./pages";
 import { buildRates, cachedRates, fetchRates } from "./rates";
 import { session, onChange, type LinkState } from "./session";
 import QRCode from "qrcode";
 import pkg from "../../package.json";
-import { $, applyTheme, confirmDialog, dialog, esc, field, icon, lang, select, setLang, setTheme, t, theme, toast } from "./ui";
+import { bindAmountInputs, $, applyTheme, confirmDialog, dialog, esc, field, icon, lang, select, setLang, setTheme, t, theme, toast } from "./ui";
 
 type Page = "dashboard" | "transactions" | "wallets" | "bareng" | "reports" | "ai" | "data" | "settings" | "security" | "admin";
 const NAV: [Page, string, string, string][] = [
@@ -51,6 +51,8 @@ function go(p: string) {
   render();
   if (p === "bareng") void refreshGroups();
 }
+
+bindAmountInputs(groupAmount);
 
 // --- Login (W03) --------------------------------------------------------------------------------
 async function renderLogin() {
@@ -154,7 +156,8 @@ function settingsPage(c: P.Ctx): string {
     <div class="section-title">${t("Mata uang utama", "Main currency")}</div><div class="chips">${CURRENCIES.map((x) => `<button class="chip" data-act="primary" data-cur="${x.code}" aria-pressed="${c.currency === x.code}">${x.code} ${x.symbol}</button>`).join("")}</div>
     <div class="section-title">${t("Tema & bahasa", "Theme & language")}</div><div class="chips">${["light", "dark", "system"].map((v) => `<button class="chip" data-act="theme" data-v="${v}" aria-pressed="${theme() === v}">${v === "light" ? t("Terang", "Light") : v === "dark" ? t("Gelap", "Dark") : t("Sistem", "System")}</button>`).join("")}</div><div class="chips"><button class="chip" data-act="lang" data-v="id" aria-pressed="${lang() === "id"}">Indonesia</button><button class="chip" data-act="lang" data-v="en" aria-pressed="${lang() === "en"}">English</button></div>
     <button class="btn outlined" data-act="go" data-page="security" style="width:fit-content">${icon("lock")}${t("Keamanan & enkripsi", "Security & encryption")}</button></div>
-  <div class="card"><div class="section-title">${t("Mata uang & kurs", "Currency & rates")}</div>${["USD", "SGD"].map((a) => `<div class="row"><span class="texts"><b>${a}/IDR</b><span class="muted small">${c.rates.isManual(a, "IDR") ? t("Manual", "Manual") : t("Otomatis · API", "Automatic · API")}</span></span><button class="btn text sm" data-act="edit-rate" data-cur="${a}">${rate(a)}</button></div>`).join("")}<p class="muted small">${t("Kosongkan nilai untuk kembali ke kurs API.", "Clear a value to return to the API rate.")}</p><button class="btn tonal" data-act="refresh-rates" style="width:fit-content">${t("Perbarui kurs", "Refresh rates")}</button><p class="muted small">Arthatis Wallet v${pkg.version} · AGPL-3.0</p></div></div>`;
+  <div class="card"><div class="section-title">${t("Mata uang & kurs", "Currency & rates")}</div>${["USD", "SGD", "MYR", "EUR"].map((a) => `<div class="row"><span class="texts"><b>${a}/IDR</b><span class="muted small">${c.rates.isManual(a, "IDR") ? t("Manual", "Manual") : t("Otomatis · API", "Automatic · API")}</span></span><button class="btn text sm" data-act="edit-rate" data-cur="${a}">${rate(a)}</button></div>`).join("")}<p class="muted small">${t("Kosongkan nilai untuk kembali ke kurs API.", "Clear a value to return to the API rate.")}</p><button class="btn tonal" data-act="refresh-rates" style="width:fit-content">${t("Perbarui kurs", "Refresh rates")}</button><p class="muted small">Arthatis Wallet v${pkg.version} · AGPL-3.0</p></div></div>
+  <div style="margin-top:16px">${P.recurringSection(c)}</div>`;
 }
 
 function securityPage(): string {
@@ -190,6 +193,10 @@ function wire(c: P.Ctx) {
     "add-wallet": () => void P.walletDialog(c),
     "edit-wallet": (el) => { const w = c.ledger.wallets.find((y) => y.id === el.dataset.id); if (w) void P.walletDialog(c, w); },
     "del-wallet": (el) => { const w = c.ledger.wallets.find((y) => y.id === el.dataset.id); if (w) void P.deleteWallet(c, w); },
+    "add-recurring": () => void P.recurringDialog(c),
+    "edit-recurring": (el) => { const r = c.ledger.recurring.find((y) => y.id === el.dataset.id); if (r) void P.recurringDialog(c, r); },
+    "toggle-recurring": (el) => { const r = c.ledger.recurring.find((y) => y.id === el.dataset.id); if (r) session.put(ENTITY.recurring, { ...r, paused: !r.paused }); },
+    "del-recurring": (el) => { const r = c.ledger.recurring.find((y) => y.id === el.dataset.id); if (r) void P.deleteRecurring(r); },
     "edit-budgets": () => void P.budgetsDialog(c),
     "export-arthatis": () => void P.exportArthatis(c),
     "export-csv": () => P.exportCsv(c),

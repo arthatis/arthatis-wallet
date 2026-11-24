@@ -26,11 +26,11 @@ import com.arthatis.wallet.data.Ledger
 fun WalletPicker(selected: Wallet?, ledger: Ledger, onSelect: (Wallet) -> Unit, exclude: String? = null, placeholder: String = tr("Pilih dompet", "Choose wallet")) {
     var open by remember { mutableStateOf(false) }
     if (selected == null) AppButton(placeholder, { open = true }, Modifier, style = BtnStyle.Outlined)
-    else WalletCard(selected.name, walletMeta(selected), lastUsed(selected, ledger), formatMinor(walletBalance(selected, ledger.txs), selected.currency), walletIcon(selected.kind)) { open = true }
+    else WalletCard(selected.name, walletMeta(selected), lastUsed(selected, ledger), formatMinor(walletBalance(selected, ledger.txs), selected.currency), walletIcon(selected), tint = walletTint(selected)) { open = true }
     if (open) ModalBottomSheet(onDismissRequest = { open = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ledger.liveWallets.filter { it.id != exclude }.forEach { w ->
-                WalletCard(w.name, walletMeta(w), null, formatMinor(walletBalance(w, ledger.txs), w.currency), walletIcon(w.kind)) { onSelect(w); open = false }
+                WalletCard(w.name, walletMeta(w), null, formatMinor(walletBalance(w, ledger.txs), w.currency), walletIcon(w), tint = walletTint(w)) { onSelect(w); open = false }
             }
         }
     }

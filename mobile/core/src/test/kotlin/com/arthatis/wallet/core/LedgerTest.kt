@@ -16,9 +16,13 @@ class LedgerTest {
         assertEquals("Rp14.125.000", formatMinor(14_125_000, "IDR"))
         assertEquals("+Rp8.500.000", formatMinor(8_500_000, "IDR", Sign.Plus))
         assertEquals("−Rp25.000", formatMinor(25_000, "IDR", Sign.Minus))
-        assertEquals("$100,00", formatMinor(10_000, "USD"))
-        assertEquals("$60,79", formatMinor(6_079, "USD"))
-        assertEquals("S$5,00", formatMinor(500, "SGD"))
+        assertEquals("$100.00", formatMinor(10_000, "USD"))
+        assertEquals("$60.79", formatMinor(6_079, "USD"))
+        assertEquals("$1,060.79", formatMinor(106_079, "USD"))
+        assertEquals("S$5.00", formatMinor(500, "SGD"))
+        assertEquals("RM1,234.50", formatMinor(123_450, "MYR"))
+        assertEquals("\u20ac1.234,56", formatMinor(123_456, "EUR"))
+        assertEquals("−\u20ac0,05", formatMinor(-5, "EUR"))
     }
 
     @Test fun transferShowsConversionCardNumbers() {
@@ -123,5 +127,37 @@ class BudgetTest {
         val line = budgetLines(listOf(Budget("b1", "cat_food", 1_500_000, 1)), txs, mapOf("bca" to bca), "IDR", Rates(), day)!!.single()
         assertEquals(1_240_000, line.spentMinor)
         assertEquals(260_000, line.remainingMinor)
+    }
+
+    @Test
+    fun amountInputDisplaysSeparatorsPerCurrency() {
+        assertEquals("1.234.567", displayAmount("1234567", "IDR").text)
+        assertEquals("1,234,567.5", displayAmount("1234567.5", "USD").text)
+        assertEquals("1.234.567,5", displayAmount("1234567.5", "EUR").text)
+        assertEquals("1.000+2.500", displayAmount("1000+2500", "IDR").text)
+        val shown = displayAmount("1234", "IDR")
+        assertEquals(5, shown.originalToDisplay(4))
+        assertEquals(4, shown.displayToOriginal(5))
+    }
+
+    @Test
+    fun amountInputIsSanitized() {
+        assertEquals("1234", sanitizeAmountInput("1.234", "IDR"))
+        assertEquals("12.5", sanitizeAmountInput("12,5", "EUR"))
+        assertEquals("12.55", sanitizeAmountInput("12.559", "USD"))
+        assertEquals("0.5", sanitizeAmountInput(".5", "USD"))
+        assertEquals("7", sanitizeAmountInput("007", "USD"))
+        assertEquals("", sanitizeAmountInput("", "USD"))
+    }
+
+    @Test
+    fun creditAndInvestmentStayOutOfCashTotal() {
+        val cash = Wallet("a", "A", WalletKind.biasa, "IDR", 1_000, 0, 0)
+        val card = Wallet("b", "B", WalletKind.kartu, "IDR", -300, 1, 0)
+        val fund = Wallet("c", "C", WalletKind.investasi, "IDR", 500, 2, 0)
+        val all = listOf(cash, card, fund)
+        assertEquals(1_000L, totalBalance(all, emptyList(), "IDR", Rates()))
+        assertEquals(-300L, creditTotal(all, emptyList(), "IDR", Rates()))
+        assertEquals(500L, investmentTotal(all, emptyList(), "IDR", Rates()))
     }
 }

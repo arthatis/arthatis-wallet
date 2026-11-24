@@ -111,7 +111,7 @@ fun csvToArchive(csv: String, now: Long): ArchiveData? {
     val rows = csv.lines().filter { it.isNotBlank() }
     if (rows.isEmpty() || rows[0].trim() != "date,wallet,kind,category,amount,currency,to_wallet,to_amount,note") return null
     val wallets = linkedMapOf<String, Wallet>(); val cats = linkedMapOf<String, Category>(); val txs = mutableListOf<Tx>()
-    fun wallet(name: String, currency: String) = wallets.getOrPut(name) { Wallet(stableId("w", name, currency), name, WalletKind.rekening, currency, 0, wallets.size, now) }
+    fun wallet(name: String, currency: String) = wallets.getOrPut(name) { Wallet(stableId("w", name, currency), name, WalletKind.biasa, currency, 0, wallets.size, now) }
     fun category(name: String, kind: EntryKind) = cats.getOrPut(name) {
         val d = defaultCategories.firstOrNull { it.name.equals(name, true) }
         if (d != null) Category("cat_${d.key}", d.key, d.name, d.kind, d.color, false, 0, 0) else Category(stableId("c", name), null, name, kind, "#717970", false, 100 + cats.size, now)

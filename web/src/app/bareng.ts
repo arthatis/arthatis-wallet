@@ -2,7 +2,7 @@
 // everything here is encrypted client-side exactly like the phone does (docs/protocol.md).
 import * as C from "./crypto";
 import * as G from "./groupcrypto";
-import { formatMinor, toMajor, toMinor, evaluate, newId } from "./model";
+import { formatMinor, toMajor, toMinor, evaluateAmount, newId } from "./model";
 import { session } from "./session";
 import { dialog, esc, field, select, t, toast, icon } from "./ui";
 
@@ -84,9 +84,9 @@ export const WITHDRAW_THRESHOLD = 1_000_000;
 
 export async function contribute(v: GroupView, withdraw: boolean): Promise<boolean> {
   const m = v.row.meta!;
-  const f = await dialog(withdraw ? t("Tarik dana", "Withdraw") : t("Tambah kontribusi", "Add contribution"), `${field("amount", `${t("Nominal", "Amount")} (${m.currency})`, "", { required: true, hint: withdraw ? t(`Di atas ${formatMinor(WITHDRAW_THRESHOLD, m.currency)} butuh persetujuan 2 anggota.`, `Above ${formatMinor(WITHDRAW_THRESHOLD, m.currency)} needs 2 approvals.`) : "" })}${field("note", t("Catatan (opsional)", "Note (optional)"))}`);
+  const f = await dialog(withdraw ? t("Tarik dana", "Withdraw") : t("Tambah kontribusi", "Add contribution"), `${field("amount", `${t("Nominal", "Amount")} (${m.currency})`, "", { required: true, amount: m.currency, hint: withdraw ? t(`Di atas ${formatMinor(WITHDRAW_THRESHOLD, m.currency)} butuh persetujuan 2 anggota.`, `Above ${formatMinor(WITHDRAW_THRESHOLD, m.currency)} needs 2 approvals.`) : "" })}${field("note", t("Catatan (opsional)", "Note (optional)"))}`);
   if (!f) return false;
-  const value = evaluate(String(f.get("amount"))); if (!value || value <= 0) { toast(t("Nominal tidak valid.", "Invalid amount.")); return false; }
+  const value = evaluateAmount(String(f.get("amount")), m.currency); if (!value || value <= 0) { toast(t("Nominal tidak valid.", "Invalid amount.")); return false; }
   const minor = toMinor(value, m.currency); const note = String(f.get("note") ?? "").trim();
   try {
     if (withdraw && minor > WITHDRAW_THRESHOLD) {

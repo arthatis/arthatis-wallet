@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Category
 import androidx.compose.material.icons.rounded.Cloud
@@ -118,7 +119,7 @@ fun SettingsScreen(vm: AppViewModel) {
                     ChipRow { supportedCurrencies.forEach { c -> AppChip("${c.code} ${c.symbol}", primary == c.code, { vm.setPrimaryCurrency(c.code) }) } }
                     Hint(tr("Saldo, total, dan input nominal mengikuti mata uang ini.", "Balances, totals and amount input follow this currency."))
                     Hint(tr("Kurs penukaran", "Exchange rates"))
-                    listOf(RatePair("USD", "IDR"), RatePair("SGD", "IDR")).forEach { pair ->
+                    listOf("USD", "SGD", "MYR", "EUR").map { RatePair(it, "IDR") }.forEach { pair ->
                         val rate = rates.effective(pair)
                         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(pair.key, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
@@ -200,15 +201,15 @@ fun RecurringScreen(vm: AppViewModel) {
     val ledger by vm.ledger.collectAsState()
     val items = ledger.recurring.filter { it.deletedAt == null }
     Column(Modifier.fillMaxSize()) {
-        TopBar(tr("Transaksi berulang", "Recurring"), onBack = { vm.back() })
+        TopBar(tr("Transaksi berulang", "Recurring"), onBack = { vm.back() }, actions = { AppIconButton(Icons.Rounded.Add, { vm.go(Route.RecurringForm()) }, description = tr("Tambah", "Add")) })
         Page(center = items.isEmpty()) {
-            Body(tr("Dicatat otomatis di HP ini sesuai jadwal. Pengingat H-1 berupa notifikasi lokal, bukan dari server. Tambahkan lewat “Ulangi otomatis” di form transaksi.", "Logged automatically on this phone on schedule. The day-before reminder is a local notification, not from a server. Add one with “Repeat automatically” in the transaction form."))
-            if (items.isEmpty()) EmptyState(Pose.Sleepy, tr("Belum ada yang berulang", "Nothing recurring yet"), tr("Gaji, tagihan, langganan — catat sekali.", "Salary, bills, subscriptions — log once."))
+            Body(tr("Dicatat otomatis di HP ini sesuai jadwal. Pengingat H-1 berupa notifikasi lokal, bukan dari server.", "Logged automatically on this phone on schedule. The day-before reminder is a local notification, not from a server."))
+            if (items.isEmpty()) EmptyState(Pose.Sleepy, tr("Belum ada yang berulang", "Nothing recurring yet"), tr("Gaji, tagihan, langganan — catat sekali.", "Salary, bills, subscriptions — log once."), action = tr("Tambah", "Add"), onAction = { vm.go(Route.RecurringForm()) })
             items.forEach { r ->
                 val cur = ledger.wallet(r.walletId)?.currency ?: "IDR"
                 val freq = when (r.frequency) { Frequency.daily -> tr("Harian", "Daily"); Frequency.weekly -> tr("Mingguan", "Weekly"); Frequency.monthly -> tr("Bulanan", "Monthly"); Frequency.yearly -> tr("Tahunan", "Yearly") }
                 val next = nextOccurrence(r, LocalDate.now(ZoneOffset.UTC))
-                AppCard {
+                AppCard(onClick = { vm.go(Route.RecurringForm(r.id)) }) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -278,10 +279,11 @@ fun AiSettingsScreen(vm: AppViewModel) {
                 Hint(tr("Dicoba lebih dulu bila HP mendukung. Tidak ada data yang keluar dari perangkat.", "Tried first if your phone supports it. Nothing leaves the device."))
                 when (nano) {
                     com.arthatis.wallet.ai.ChatEngine.NanoStatus.Ready -> Text(tr("Tersedia di HP ini ✓", "Available on this phone ✓"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                    com.arthatis.wallet.ai.ChatEngine.NanoStatus.NotInstalled -> Text(tr("Belum terpasang di HP ini. Pasang model Gemini Nano lewat pengaturan sistem Android; sampai itu aplikasi memakai pilihan berikutnya.", "Not installed on this phone yet. Install the Gemini Nano model from Android system settings; until then the app uses the next option."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                    com.arthatis.wallet.ai.ChatEngine.NanoStatus.NotInstalled -> Text(tr("Model Gemini Nano belum bisa dipakai aplikasi ini (belum diunduh sistem, atau AICore belum siap). Diperiksa dengan uji coba nyata. Sampai siap, aplikasi memakai pilihan berikutnya.", "The Gemini Nano model is not usable by this app yet (not downloaded by the system, or AICore not ready). Checked with a real test run. Until then the app uses the next option."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     com.arthatis.wallet.ai.ChatEngine.NanoStatus.Unsupported -> Text(tr("Tidak tersedia di HP ini. Aplikasi memakai pilihan berikutnya.", "Not available on this phone. The app uses the next option."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                     null -> Hint(tr("Memeriksa…", "Checking…"))
                 }
+                if (nano == com.arthatis.wallet.ai.ChatEngine.NanoStatus.NotInstalled || nano == com.arthatis.wallet.ai.ChatEngine.NanoStatus.Unsupported) Hint(tr("Detail: ", "Detail: ") + vm.nanoDetail())
             } }
             AppCard { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(tr("2 · AI di servermu", "2 · AI on your server"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface); Hint(tr("Ollama di VPS-mu. Teks pertanyaan dikirim ke servermu, tidak terenkripsi E2EE.", "Ollama on your VPS. The question text is sent to your server, not E2EE.")) }
@@ -332,7 +334,7 @@ fun BudgetsScreen(vm: AppViewModel) {
     editing?.let { c ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { editing = null }, title = { Text(categoryName(c)) },
-            text = { AppTextField(text, { text = it }, tr("Anggaran per bulan ($currency)", "Monthly budget ($currency)"), keyboard = KeyboardType.Decimal, supporting = tr("Kosongkan untuk menghapus.", "Leave empty to remove.")) },
+            text = { AmountField(text, { text = it }, currency, tr("Anggaran per bulan ($currency)", "Monthly budget ($currency)"), supporting = tr("Kosongkan untuk menghapus.", "Leave empty to remove.")) },
             confirmButton = { androidx.compose.material3.TextButton({
                 val minor = com.arthatis.wallet.core.evaluateExpression(text)?.let { runCatching { com.arthatis.wallet.core.toMinor(it, currency) }.getOrNull() }
                 val existing = ledger.budgets.firstOrNull { it.categoryId == c.id }

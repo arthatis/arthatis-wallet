@@ -46,6 +46,7 @@ import com.arthatis.wallet.core.currencyInfo
 import com.arthatis.wallet.core.dayOf
 import com.arthatis.wallet.core.epochMillis
 import com.arthatis.wallet.core.evaluateExpression
+import com.arthatis.wallet.core.legacyIcon
 import com.arthatis.wallet.core.formatMinor
 import com.arthatis.wallet.core.formatRate
 import com.arthatis.wallet.core.pairFor
@@ -61,15 +62,18 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 @Composable
-private fun Keypad(onKey: (String) -> Unit) {
-    val rows = listOf(listOf("7", "8", "9", "⌫"), listOf("4", "5", "6", "+"), listOf("1", "2", "3", "−"), listOf("k", "0", "000", "×"))
+private fun Keypad(currency: String, onKey: (String) -> Unit) {
+    val info = com.arthatis.wallet.core.currencyInfo(currency)
+    // Whole-unit currencies (IDR) get the 45k shortcut; the others get a decimal key labelled with their own mark.
+    val extra = if (info.scale == 0) "k" else info.decimal.toString()
+    val rows = listOf(listOf("7", "8", "9", "⌫"), listOf("4", "5", "6", "+"), listOf("1", "2", "3", "−"), listOf(extra, "0", "000", "×"))
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { key ->
                     Box(
                         Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(Radius.medium))
-                            .background(if (key in listOf("+", "−", "×", "⌫", "k")) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .background(if (key in listOf("+", "−", "×", "⌫", "k", info.decimal.toString())) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
                             .clickable { onKey(key) },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -111,7 +115,15 @@ fun AddTxScreen(vm: AppViewModel, route: Route.AddTx) {
     val undoLabel = tr("Urungkan", "Undo")
 
     fun key(k: String) {
-        expr = when (k) { "⌫" -> expr.dropLast(1); "k" -> expr + "k"; else -> expr + k }
+        val info = com.arthatis.wallet.core.currencyInfo(currency)
+        val token = expr.takeLastWhile { it.isDigit() || it == '.' }
+        expr = when {
+            k == "⌫" -> expr.dropLast(1)
+            k == info.decimal.toString() && info.scale > 0 -> if ('.' in token) expr else (if (token.isEmpty()) expr + "0." else "$expr.")
+            // Never take more fraction digits than the currency has: they would be rounded away silently.
+            k.all { it.isDigit() } && '.' in token && token.substringAfter('.').length + k.length > info.scale -> expr
+            else -> expr + k
+        }
     }
     var quickBusy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -138,10 +150,11 @@ fun AddTxScreen(vm: AppViewModel, route: Route.AddTx) {
                 AppChip(tr("Pemasukan", "Income"), kind == EntryKind.income, { kind = EntryKind.income; categoryId = null })
                 DateChip(date) { date = it }
             }
-            Text(minor?.let { formatMinor(it, currency) } ?: expr.ifBlank { formatMinor(0, currency) }, Modifier.fillMaxWidth(), style = MaterialTheme.typography.headlineLarge, color = if (minor == null && expr.isNotBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+            val typedPlain = expr.isNotEmpty() && expr.all { it.isDigit() || it == '.' }
+            Text(if (typedPlain) com.arthatis.wallet.core.currencyInfo(currency).symbol + com.arthatis.wallet.core.displayAmount(expr, currency).text else minor?.let { formatMinor(it, currency) } ?: com.arthatis.wallet.core.displayAmount(expr, currency).text.ifBlank { formatMinor(0, currency) }, Modifier.fillMaxWidth(), style = MaterialTheme.typography.headlineLarge, color = if (minor == null && expr.isNotBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
             Hint(tr("Nominal", "Amount"), Modifier.fillMaxWidth())
             if (existing == null) AppTextField(quick, { quick = it }, tr("Ketik cepat", "Quick entry"), supporting = tr("Ketik “bakso 25k” — AI akan isi sisanya.", "Type “lunch 25k” — AI fills in the rest."), trailing = { if (quickBusy) androidx.compose.material3.CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp) else AppIconButton(Icons.Rounded.AutoAwesome, { applyQuick() }, description = tr("Isi otomatis", "Autofill")) })
-            Keypad(::key)
+            Keypad(currency, ::key)
             FieldLabel(tr("Kategori", "Category"))
             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 cats.forEach { c -> AppChip(categoryName(c), categoryId == c.id, { categoryId = c.id }, leading = categoryIcon(c.key)) }
@@ -189,22 +202,27 @@ fun AddTxScreen(vm: AppViewModel, route: Route.AddTx) {
 fun AddWalletScreen(vm: AppViewModel) {
     val ledger by vm.ledger.collectAsState()
     var name by remember { mutableStateOf("") }
-    var kind by remember { mutableStateOf(WalletKind.rekening) }
+    var kind by remember { mutableStateOf(WalletKind.biasa) }
+    var icon by remember { mutableStateOf("wallet") }
+    var color by remember { mutableStateOf<String?>(null) }
     var currency by remember { mutableStateOf(ledger.profile?.primaryCurrency ?: "IDR") }
     var opening by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize()) {
         TopBar(tr("Tambah dompet", "Add wallet"), onBack = { vm.back() })
         Page {
             AppTextField(name, { name = it }, tr("Nama dompet", "Wallet name"), supporting = tr("Contoh: Wise, Jenius, Celengan.", "Example: Wise, Jenius, Piggy bank."))
-            FieldLabel(tr("Jenis", "Type"))
-            ChipRow { WalletKind.entries.forEach { k -> AppChip(walletKindLabel(k), kind == k, { kind = k }) } }
+            FieldLabel(tr("Tipe", "Type"))
+            ChipRow { listOf(WalletKind.biasa, WalletKind.investasi, WalletKind.kartu).forEach { k -> AppChip(walletKindLabel(k), kind == k, { kind = k; if (icon == "wallet" || icon == "trending" || icon == "card") icon = legacyIcon(k) }) } }
+            if (kind == WalletKind.kartu) Hint(tr("Saldo boleh minus dan dihitung sebagai utang, di luar total kas.", "Balance may go negative and counts as debt, outside the cash total."))
+            if (kind == WalletKind.investasi) Hint(tr("Dihitung terpisah dari total kas di Beranda.", "Counted apart from the cash total on Home."))
+            WalletStyleFields(icon, { icon = it }, color, { color = it })
             FieldLabel(tr("Mata uang", "Currency"))
             ChipRow { supportedCurrencies.forEach { c -> AppChip("${c.code} ${c.symbol}", currency == c.code, { currency = c.code }) } }
             Hint(tr("1 dompet hanya 1 mata uang — tidak bisa diubah setelah dompet dibuat.", "1 wallet holds 1 currency — it can't be changed once the wallet is created."))
-            AppTextField(opening, { opening = it }, tr("Saldo awal (opsional)", "Opening balance (optional)"), keyboard = KeyboardType.Decimal, supporting = tr("Dalam mata uang dompet yang dipilih.", "In the wallet's currency."))
+            AmountField(opening, { opening = it }, currency, tr("Saldo awal (opsional)", "Opening balance (optional)"), supporting = tr("Dalam mata uang dompet yang dipilih.", "In the wallet's currency."))
             AppButton(tr("Simpan dompet", "Save wallet"), {
                 val minor = evaluateExpression(opening)?.let { runCatching { toMinor(it, currency) }.getOrNull() } ?: 0L
-                vm.saveWallet(name.trim(), kind, currency, minor); vm.back()
+                vm.saveWallet(name.trim(), kind, currency, minor, icon, color); vm.back()
             }, Modifier.fillMaxWidth(), enabled = name.isNotBlank())
         }
     }
@@ -239,7 +257,7 @@ fun TransferScreen(vm: AppViewModel, route: Route.Transfer) {
             WalletPicker(from, ledger, { fromId = it.id; rateText = "" }, exclude = toId)
             FieldLabel(tr("Ke", "To"))
             WalletPicker(to, ledger, { toId = it.id; rateText = "" }, exclude = fromId)
-            AppTextField(amount, { amount = it }, tr("Nominal", "Amount"), keyboard = KeyboardType.Decimal, supporting = if (from != null && minor != null) tr("Saldo ${from.name} setelah transfer: ${formatMinor(walletBalance(from, ledger.txs) - minor, from.currency)}.", "${from.name} balance after transfer: ${formatMinor(walletBalance(from, ledger.txs) - minor, from.currency)}.") else null)
+            AmountField(amount, { amount = it }, from?.currency ?: "IDR", tr("Nominal", "Amount"), supporting = if (from != null && minor != null) tr("Saldo ${from.name} setelah transfer: ${formatMinor(walletBalance(from, ledger.txs) - minor, from.currency)}.", "${from.name} balance after transfer: ${formatMinor(walletBalance(from, ledger.txs) - minor, from.currency)}.") else null)
             if (different && from != null && to != null && pair != null) {
                 AppCard(padding = 20.dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

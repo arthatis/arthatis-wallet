@@ -130,3 +130,15 @@ dialog h2 { font-size: 24px; line-height: 32px; font-weight: 400; }
 }
 code { background: color-mix(in srgb, currentColor 12%, transparent); padding: 2px 6px; border-radius: 6px; font: 12px ui-monospace, monospace; word-break: break-all; }
 .card > .btn { justify-self: start; }
+
+/* wallet icon + colour pickers */
+.row .icon.tinted { background: color-mix(in srgb, var(--wc) 18%, transparent); color: var(--wc); }
+.picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.pick, .swatch { position: relative; cursor: pointer; }
+.pick input, .swatch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.pick span { width: 44px; height: 44px; border-radius: var(--shape-medium); display: grid; place-items: center; border: 1px solid var(--outlineVariant); background: var(--surfaceContainerHigh); color: var(--onSecondaryContainer); }
+.pick span svg { width: 24px; height: 24px; fill: currentColor; }
+.pick input:checked + span { border: 2px solid var(--primary); background: var(--secondaryContainer); }
+.swatch span { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--outlineVariant); background: var(--secondaryContainer); color: var(--onSecondaryContainer); font-size: 13px; }
+.swatch input:checked + span { outline: 3px solid var(--onSurface); outline-offset: 2px; }
+.pick input:focus-visible + span, .swatch input:focus-visible + span { outline: 3px solid var(--primary); outline-offset: 2px; }

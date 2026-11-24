@@ -22,6 +22,9 @@ import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
 import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.AccountBalance
 import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.CardGiftcard
+import androidx.compose.material.icons.rounded.CreditCard
+import androidx.compose.material.icons.rounded.Paid
 import androidx.compose.material.icons.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.DirectionsCar
@@ -53,7 +56,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.arthatis.wallet.core.Wallet
 import com.arthatis.wallet.core.WalletKind
+import com.arthatis.wallet.core.legacyIcon
 
 fun categoryIcon(key: String?): ImageVector = when (key) {
     "food" -> Icons.Rounded.Restaurant
@@ -70,19 +75,33 @@ fun categoryIcon(key: String?): ImageVector = when (key) {
     else -> Icons.Rounded.Payments
 }
 
-fun walletIcon(kind: WalletKind): ImageVector = when (kind) {
-    WalletKind.rekening -> Icons.Rounded.AccountBalance
-    WalletKind.tunai -> Icons.Rounded.Payments
-    WalletKind.ewallet -> Icons.Rounded.Phonelink
-    WalletKind.investasi -> Icons.AutoMirrored.Rounded.TrendingUp
+fun iconFor(key: String): ImageVector = when (key) {
+    "bank" -> Icons.Rounded.AccountBalance
+    "cash" -> Icons.Rounded.Payments
+    "phone" -> Icons.Rounded.Phonelink
+    "card" -> Icons.Rounded.CreditCard
+    "savings" -> Icons.Rounded.Savings
+    "trending" -> Icons.AutoMirrored.Rounded.TrendingUp
+    "gift" -> Icons.Rounded.CardGiftcard
+    "home" -> Icons.Rounded.Home
+    "car" -> Icons.Rounded.DirectionsCar
+    "shopping" -> Icons.Rounded.ShoppingBag
+    "coin" -> Icons.Rounded.Paid
+    else -> Icons.Rounded.AccountBalanceWallet
 }
+
+fun walletIcon(w: Wallet): ImageVector = iconFor(w.icon ?: legacyIcon(w.kind))
+
+/** The wallet's own colour, or null for the theme default. */
+fun walletTint(w: Wallet): Color? = w.color?.let { hexColor(it) }
+
+fun hexColor(hex: String): Color? = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrNull()
 
 @Composable
 fun walletKindLabel(kind: WalletKind): String = when (kind) {
-    WalletKind.rekening -> tr("Rekening", "Bank account")
-    WalletKind.tunai -> tr("Tunai", "Cash")
-    WalletKind.ewallet -> tr("E-Wallet", "E-wallet")
     WalletKind.investasi -> tr("Investasi", "Investment")
+    WalletKind.kartu -> tr("Kartu kredit", "Credit card")
+    else -> tr("Biasa", "Regular")
 }
 
 /** Card surface: surfaceContainerHigh with a hairline outlineVariant border, radius 12 (shape/medium). Low alone was nearly invisible on surface. */
@@ -97,9 +116,9 @@ fun AppCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, paddin
 }
 
 @Composable
-private fun LeadingIcon(icon: ImageVector, size: Dp, container: Color = MaterialTheme.colorScheme.secondaryContainer) {
-    Box(Modifier.size(size).clip(RoundedCornerShape(Radius.medium)).background(container), contentAlignment = Alignment.Center) {
-        Icon(icon, null, Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSecondaryContainer)
+private fun LeadingIcon(icon: ImageVector, size: Dp, container: Color = MaterialTheme.colorScheme.secondaryContainer, tint: Color? = null) {
+    Box(Modifier.size(size).clip(RoundedCornerShape(Radius.medium)).background(tint?.copy(alpha = 0.18f) ?: container), contentAlignment = Alignment.Center) {
+        Icon(icon, null, Modifier.size(24.dp), tint = tint ?: MaterialTheme.colorScheme.onSecondaryContainer)
     }
 }
 
@@ -120,10 +139,10 @@ fun TxRow(title: String, supporting: String, amount: String, income: Boolean, ic
 
 /** M/WalletCard: Personal (secondaryContainer icon) or Shared (tertiaryContainer icon). */
 @Composable
-fun WalletCard(name: String, meta: String, extra: String?, balance: String, icon: ImageVector, modifier: Modifier = Modifier, shared: Boolean = false, onClick: (() -> Unit)? = null) {
+fun WalletCard(name: String, meta: String, extra: String?, balance: String, icon: ImageVector, modifier: Modifier = Modifier, shared: Boolean = false, tint: Color? = null, onClick: (() -> Unit)? = null) {
     AppCard(modifier, onClick) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            LeadingIcon(icon, 48.dp, if (shared) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer)
+            LeadingIcon(icon, 48.dp, if (shared) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.secondaryContainer, tint)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

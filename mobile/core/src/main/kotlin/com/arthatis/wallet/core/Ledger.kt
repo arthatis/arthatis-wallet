@@ -25,7 +25,18 @@ fun walletBalance(wallet: Wallet, txs: List<Tx>): Long {
 }
 
 /** Total of all wallets converted into [currency]. Null when a needed rate is unavailable. */
-fun totalBalance(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): Long? {
+fun totalBalance(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): Long? =
+    sumBalances(wallets.filter { !it.kind.isCredit && !it.kind.isInvestment }, txs, currency, rates)
+
+/** Investment wallets only; kept apart from the cash total. */
+fun investmentTotal(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): Long? =
+    sumBalances(wallets.filter { it.kind.isInvestment }, txs, currency, rates)
+
+/** Credit-card wallets only: negative = debt. Kept apart from the cash total. */
+fun creditTotal(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): Long? =
+    sumBalances(wallets.filter { it.kind.isCredit }, txs, currency, rates)
+
+private fun sumBalances(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): Long? {
     var total = 0L
     for (wallet in wallets) {
         if (wallet.deletedAt != null) continue

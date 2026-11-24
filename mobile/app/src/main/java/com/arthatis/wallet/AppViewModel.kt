@@ -65,6 +65,7 @@ sealed interface Route {
     data object ImportPreview : Route
     data object ServerSettings : Route
     data object Recurring : Route
+    data class RecurringForm(val id: String? = null) : Route
     data object Categories : Route
     data object AiSettings : Route
     data object Budgets : Route
@@ -150,10 +151,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- Onboarding ---------------------------------------------------------------------------
 
-    fun finishOnboarding(name: String, currency: String, walletName: String, kind: WalletKind, openingMinor: Long, mode: ServerMode, url: String, email: String = "", emailCode: String = "") {
+    fun finishOnboarding(name: String, currency: String, walletName: String, kind: WalletKind, icon: String, color: String?, openingMinor: Long, mode: ServerMode, url: String, email: String = "", emailCode: String = "") {
         viewModelScope.launch {
             repo.saveProfile(Profile(name = name.ifBlank { "—" }, primaryCurrency = currency, updatedAt = 0))
-            repo.saveWallet(Wallet(newId(), walletName.ifBlank { "Tunai" }, kind, currency, openingMinor, 0, 0))
+            repo.saveWallet(Wallet(newId(), walletName.ifBlank { "Tunai" }, kind, currency, openingMinor, 0, 0, icon = icon, color = color))
             prefs.onboarded = true
             if (mode != ServerMode.None) connect(mode, url, silent = false, email = email, emailCode = emailCode)
             reloadSettings()
@@ -228,9 +229,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- Ledger -------------------------------------------------------------------------------
 
-    fun saveWallet(name: String, kind: WalletKind, currency: String, openingMinor: Long) {
+    fun saveWallet(name: String, kind: WalletKind, currency: String, openingMinor: Long, icon: String? = null, color: String? = null) {
         viewModelScope.launch {
-            repo.saveWallet(Wallet(newId(), name, kind, currency, openingMinor, repo.nextWalletPosition(), 0))
+            repo.saveWallet(Wallet(newId(), name, kind, currency, openingMinor, repo.nextWalletPosition(), 0, icon = icon, color = color))
             runSync()
         }
     }
@@ -298,6 +299,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun nanoStatus() = graph.chat.nanoStatus()
+    fun nanoDetail() = graph.chat.nanoDetail
 
     /** Quick-entry text → draft, through the same engines as chat. */
     suspend fun quickDraft(text: String): ChatDraft? =

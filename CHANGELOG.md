@@ -2,6 +2,14 @@
 
 Versi mengikuti [SemVer](https://semver.org). Selama `0.0.x` ini adalah pra-rilis: belum di Play Store, belum diaudit, dan APK ditandatangani dengan kunci debug.
 
+## [Belum dirilis]
+
+- Input nominal memakai pemisah ribuan sesuai mata uang (IDR `1.234.567`, USD/SGD/MYR `1,234.56`, EUR `1.234,56`) saat mengetik; keypad transaksi punya tombol desimal untuk mata uang berdesimal (sebelumnya angka di belakang koma tidak bisa dimasukkan).
+- Mata uang baru: MYR (RM) dan EUR.
+- Dompet: jenis Rekening/Tunai/E-Wallet diganti pilihan ikon dan warna; tipe Biasa, Investasi, Kartu kredit (investasi dan utang kartu tampil terpisah dari total kas). Data lama tetap terbaca.
+- Layar tambah/ubah transaksi berulang di aplikasi dan web.
+- Status Gemini Nano di Pengaturan AI diperiksa dengan uji coba nyata, bukan hanya status unduhan, dan menampilkan detailnya.
+
 ## [0.0.1] — pra-rilis
 
 Pertama kali Arthatis Wallet v2 dapat dipasang.

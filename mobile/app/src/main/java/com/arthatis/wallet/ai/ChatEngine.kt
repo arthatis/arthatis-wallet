@@ -50,25 +50,34 @@ class ChatEngine(private val prefs: Prefs, private val serverHttp: Http) {
 
     private suspend fun nano(prompt: String): String? = runCatching {
         val model = Generation.getClient()
-        if (model.checkStatus() != FeatureStatus.AVAILABLE) return null
         model.generateContent(prompt).candidates.firstOrNull()?.text
     }.getOrNull()
 
     enum class NanoStatus { Ready, NotInstalled, Unsupported }
 
+    /** Result of the last real try, so Settings can say what actually happened instead of guessing from the status flag. */
+    @Volatile var nanoDetail: String = ""
+        private set
+
     /**
-     * Only reports; we never download or install the model. Installing Gemini Nano is the user's (and the OS's) job,
-     * so the app just says whether this phone can use it right now.
+     * checkStatus() alone can report DOWNLOADABLE/DOWNLOADING on phones where the model is already present and usable
+     * (the status describes this app's feature download, not whether AICore can answer). So a status other than
+     * AVAILABLE is confirmed with one tiny generation; if that answers, Nano is ready. We still never download anything.
      */
-    suspend fun nanoStatus(): NanoStatus = runCatching {
-        when (Generation.getClient().checkStatus()) {
-            FeatureStatus.AVAILABLE -> NanoStatus.Ready
+    suspend fun nanoStatus(): NanoStatus {
+        val flag = runCatching { Generation.getClient().checkStatus() }
+        val status = flag.getOrNull()
+        if (status == FeatureStatus.AVAILABLE) { nanoDetail = "AVAILABLE"; return NanoStatus.Ready }
+        val probe = runCatching { Generation.getClient().generateContent("Reply with: ok").candidates.firstOrNull()?.text }
+        if (!probe.getOrNull().isNullOrBlank()) { nanoDetail = "probe ok (status=$status)"; return NanoStatus.Ready }
+        nanoDetail = "status=${status ?: flag.exceptionOrNull()?.javaClass?.simpleName}; probe=${probe.exceptionOrNull()?.message?.take(80)}"
+        return when (status) {
             FeatureStatus.DOWNLOADABLE, FeatureStatus.DOWNLOADING -> NanoStatus.NotInstalled
             else -> NanoStatus.Unsupported
         }
-    }.getOrDefault(NanoStatus.Unsupported)
+    }
 
-    suspend fun nanoAvailable(): Boolean = runCatching { Generation.getClient().checkStatus() == FeatureStatus.AVAILABLE }.getOrDefault(false)
+    suspend fun nanoAvailable(): Boolean = nanoStatus() == NanoStatus.Ready
 
     suspend fun serverAvailable(): Boolean = prefs.serverUrl != null && runCatching {
         serverHttp.call("GET", "/v1/ai/status")["available"]?.jsonPrimitive?.content == "true"

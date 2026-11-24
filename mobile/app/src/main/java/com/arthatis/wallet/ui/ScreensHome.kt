@@ -51,7 +51,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 
 @Composable
-fun walletMeta(w: Wallet) = "${walletKindLabel(w.kind)} · ${w.currency}"
+fun walletMeta(w: Wallet) = if (w.kind == com.arthatis.wallet.core.WalletKind.investasi || w.kind == com.arthatis.wallet.core.WalletKind.kartu) "${walletKindLabel(w.kind)} · ${w.currency}" else w.currency
 
 @Composable
 fun lastUsed(w: Wallet, ledger: Ledger): String? {
@@ -119,6 +119,12 @@ fun HomeScreen(vm: AppViewModel) {
     val (from, until) = monthBounds(today)
     val flow = periodFlow(ledger.liveTxs, ledger.liveWallets.associateBy { it.id }, currency, rates, from, until)
     val total = totalBalance(ledger.liveWallets, ledger.txs, currency, rates)
+    val invested = com.arthatis.wallet.core.investmentTotal(ledger.liveWallets, ledger.txs, currency, rates)?.takeIf { it != 0L }
+    val debt = com.arthatis.wallet.core.creditTotal(ledger.liveWallets, ledger.txs, currency, rates)?.takeIf { it != 0L }
+    val extras = listOfNotNull(
+        invested?.let { tr("Investasi ${formatMinor(it, currency)}", "Investments ${formatMinor(it, currency)}") },
+        debt?.let { tr("Kartu kredit ${formatMinor(it, currency)}", "Credit cards ${formatMinor(it, currency)}") },
+    ).joinToString(" · ")
     var filter by remember { mutableStateOf(0) }
     var dialOpen by remember { mutableStateOf(false) }
 
@@ -143,7 +149,7 @@ fun HomeScreen(vm: AppViewModel) {
             AccessCard(vm)
             BalanceHero(
                 total = total?.let { formatMinor(it, currency) } ?: "—",
-                subtitle = if (total == null) tr("Kurs belum tersedia. Ketuk Pengaturan → Mata uang & kurs.", "Rates unavailable. Open Settings → Currency & rates.") else tr("${ledger.liveWallets.size} dompet · total dalam $currency", "${ledger.liveWallets.size} wallets · total in $currency"),
+                subtitle = if (total == null) tr("Kurs belum tersedia. Ketuk Pengaturan → Mata uang & kurs.", "Rates unavailable. Open Settings → Currency & rates.") else tr("${ledger.liveWallets.size} dompet · total kas dalam $currency", "${ledger.liveWallets.size} wallets · cash total in $currency") + (if (extras.isEmpty()) "" else "\n$extras"),
                 statusChip = chip,
                 incomeLabel = tr("Masuk", "Income"), income = flow?.let { formatMinor(it.incomeMinor, currency, Sign.Plus) } ?: "—",
                 expenseLabel = tr("Keluar", "Expense"), expense = flow?.let { formatMinor(it.expenseMinor, currency, Sign.Minus) } ?: "—",
@@ -179,7 +185,7 @@ fun HomeScreen(vm: AppViewModel) {
 @Composable
 private fun WalletGrid(wallets: List<Wallet>, ledger: Ledger, vm: AppViewModel, wide: Boolean) {
     val items: @Composable (Wallet) -> Unit = { w ->
-        WalletCard(w.name, walletMeta(w), lastUsed(w, ledger), formatMinor(walletBalance(w, ledger.txs), w.currency), walletIcon(w.kind)) { vm.go(Route.WalletDetail(w.id)) }
+        WalletCard(w.name, walletMeta(w), lastUsed(w, ledger), formatMinor(walletBalance(w, ledger.txs), w.currency), walletIcon(w), tint = walletTint(w)) { vm.go(Route.WalletDetail(w.id)) }
     }
     if (wide) wallets.chunked(2).forEach { pair ->
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { pair.forEach { Column(Modifier.weight(1f)) { items(it) } }; if (pair.size == 1) Column(Modifier.weight(1f)) {} }
@@ -189,7 +195,7 @@ private fun WalletGrid(wallets: List<Wallet>, ledger: Ledger, vm: AppViewModel, 
 @Composable
 private fun SharedAsWallet(g: GroupSummary, vm: AppViewModel) {
     val meta = g.meta ?: return
-    WalletCard(meta.name, tr("Bareng · ${meta.currency}", "Shared · ${meta.currency}"), tr("${g.memberCount} anggota", "${g.memberCount} members"), "", walletIcon(com.arthatis.wallet.core.WalletKind.rekening), shared = true) { vm.go(Route.BarengDetail(g.id)) }
+    WalletCard(meta.name, tr("Bareng · ${meta.currency}", "Shared · ${meta.currency}"), tr("${g.memberCount} anggota", "${g.memberCount} members"), "", iconFor("wallet"), shared = true) { vm.go(Route.BarengDetail(g.id)) }
 }
 
 /** Dompet tab: the full list (the design links "Lihat semua" here). */
@@ -201,7 +207,7 @@ fun WalletsScreen(vm: AppViewModel) {
         Page(center = ledger.liveWallets.isEmpty()) {
             if (ledger.liveWallets.isEmpty()) EmptyState(Pose.Sleepy, tr("Belum ada dompet", "No wallets yet"), tr("Tambahkan dompet pertamamu.", "Add your first wallet."), action = tr("Tambah dompet", "Add wallet"), onAction = { vm.go(Route.AddWallet) })
             ledger.liveWallets.forEach { w ->
-                WalletCard(w.name, walletMeta(w), lastUsed(w, ledger), formatMinor(walletBalance(w, ledger.txs), w.currency), walletIcon(w.kind)) { vm.go(Route.WalletDetail(w.id)) }
+                WalletCard(w.name, walletMeta(w), lastUsed(w, ledger), formatMinor(walletBalance(w, ledger.txs), w.currency), walletIcon(w), tint = walletTint(w)) { vm.go(Route.WalletDetail(w.id)) }
             }
             if (ledger.liveWallets.size > 1) AppButton(tr("Transfer antar dompet", "Transfer between wallets"), { vm.go(Route.Transfer(null)) }, Modifier.fillMaxWidth(), style = BtnStyle.Tonal, icon = Icons.Rounded.SwapHoriz)
         }
@@ -237,7 +243,7 @@ fun WalletDetailScreen(vm: AppViewModel, id: String) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Hint(tr("Saldo ${wallet.name}", "${wallet.name} balance"))
                     Text(formatMinor(walletBalance(wallet, ledger.txs), wallet.currency), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
-                    Hint("${walletKindLabel(wallet.kind)} · ${wallet.currency}")
+                    Hint(walletMeta(wallet))
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

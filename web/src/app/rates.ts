@@ -5,7 +5,7 @@ const KEY = "arthatis.rates";
 export async function fetchRates(): Promise<Record<string, number>> {
   const cached = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Record<string, number>;
   const out = { ...cached };
-  await Promise.all(["USD", "SGD"].map(async (base) => {
+  await Promise.all(["USD", "SGD", "MYR", "EUR"].map(async (base) => {
     try {
       const r = await fetch(`https://api.frankfurter.dev/v1/latest?base=${base}&symbols=IDR`);
       if (r.ok) { const j = await r.json(); if (j?.rates?.IDR) out[base] = j.rates.IDR as number; }

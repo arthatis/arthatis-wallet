@@ -11,6 +11,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -257,5 +258,73 @@ fun SpeedDialFab(actions: List<DialAction>, open: Boolean, onOpenChange: (Boolea
             }
         }
         Fab(if (open) Icons.Rounded.Close else Icons.Rounded.Add, { onOpenChange(!open) }, description = if (open) "Tutup" else "Tambah")
+    }
+}
+
+
+/**
+ * Amount input that shows the currency's thousands separator while typing (`1.234.567`, `1,234.56`, `1.234,56`).
+ * [value] is the plain stored text (`1234567.5`); [onChange] gets it back already cleaned.
+ */
+@Composable
+fun AmountField(
+    value: String, onChange: (String) -> Unit, currency: String, label: String, modifier: Modifier = Modifier,
+    supporting: String? = null, error: Boolean = false,
+) {
+    val transformation = remember(currency) {
+        androidx.compose.ui.text.input.VisualTransformation { text ->
+            val shown = com.arthatis.wallet.core.displayAmount(text.text, currency)
+            androidx.compose.ui.text.input.TransformedText(
+                androidx.compose.ui.text.AnnotatedString(shown.text),
+                object : androidx.compose.ui.text.input.OffsetMapping {
+                    override fun originalToTransformed(offset: Int) = shown.originalToDisplay(offset)
+                    override fun transformedToOriginal(offset: Int) = shown.displayToOriginal(offset)
+                },
+            )
+        }
+    }
+    OutlinedTextField(
+        value = value, onValueChange = { onChange(com.arthatis.wallet.core.sanitizeAmountInput(it, currency)) }, label = { Text(label) },
+        modifier = modifier.fillMaxWidth(), supportingText = supporting?.let { { Text(it) } }, isError = error, singleLine = true,
+        prefix = { Text(com.arthatis.wallet.core.currencyInfo(currency).symbol) },
+        visualTransformation = transformation,
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        shape = RoundedCornerShape(Radius.extraSmall),
+    )
+}
+
+/** Icon grid + colour palette for a wallet; both optional (null colour = theme default). */
+@Composable
+fun WalletStyleFields(icon: String, onIcon: (String) -> Unit, color: String?, onColor: (String?) -> Unit) {
+    val tint = color?.let { hexColor(it) }
+    FieldLabel(tr("Ikon", "Icon"))
+    ChipRow {
+        com.arthatis.wallet.core.walletIconKeys.forEach { key ->
+            val selected = icon == key
+            Box(
+                Modifier.size(48.dp).clip(RoundedCornerShape(Radius.medium))
+                    .background(if (selected) (tint?.copy(alpha = 0.18f) ?: MaterialTheme.colorScheme.secondaryContainer) else MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .border(if (selected) 2.dp else 1.dp, if (selected) (tint ?: MaterialTheme.colorScheme.primary) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(Radius.medium))
+                    .clickable { onIcon(key) },
+                contentAlignment = Alignment.Center,
+            ) { androidx.compose.material3.Icon(iconFor(key), key, tint = tint ?: MaterialTheme.colorScheme.onSecondaryContainer) }
+        }
+    }
+    FieldLabel(tr("Warna", "Colour"))
+    ChipRow {
+        Box(
+            Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer)
+                .border(if (color == null) 3.dp else 1.dp, if (color == null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                .clickable { onColor(null) },
+            contentAlignment = Alignment.Center,
+        ) { Text("A", color = MaterialTheme.colorScheme.onSecondaryContainer, style = MaterialTheme.typography.labelLarge) }
+        com.arthatis.wallet.core.walletColors.forEach { hex ->
+            val c = hexColor(hex) ?: return@forEach
+            Box(
+                Modifier.size(40.dp).clip(CircleShape).background(c)
+                    .border(if (color == hex) 3.dp else 1.dp, if (color == hex) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                    .clickable { onColor(hex) },
+            )
+        }
     }
 }

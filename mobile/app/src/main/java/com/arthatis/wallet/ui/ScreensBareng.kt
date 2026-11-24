@@ -138,7 +138,7 @@ fun BarengCreateScreen(vm: AppViewModel) {
             ChipRow { AppChip(tr("Tabungan", "Savings"), kind == "tabungan", { kind = "tabungan" }); AppChip(tr("Investasi", "Investment"), kind == "investasi", { kind = "investasi" }) }
             FieldLabel(tr("Mata uang", "Currency"))
             ChipRow { supportedCurrencies.forEach { c -> AppChip(c.code, currency == c.code, { currency = c.code }) } }
-            AppTextField(target, { target = it }, tr("Target (opsional)", "Target (optional)"), keyboard = KeyboardType.Decimal)
+            AmountField(target, { target = it }, currency, tr("Target (opsional)", "Target (optional)"))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(tr("Tanggal target", "Target date"), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface)
                 DateChip(date ?: epochMillis(LocalDate.now(ZoneOffset.UTC)).also { }) { date = it }
@@ -259,7 +259,7 @@ fun BarengDetailScreen(vm: AppViewModel, id: String) {
                 title = { Text(if (sheet == "in") tr("Tambah kontribusi", "Add contribution") else tr("Tarik dana", "Withdraw")) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AppTextField(amount, { amount = it }, tr("Nominal ($cur)", "Amount ($cur)"), keyboard = KeyboardType.Decimal)
+                        AmountField(amount, { amount = it }, cur, tr("Nominal ($cur)", "Amount ($cur)"))
                         AppTextField(note, { note = it }, tr("Catatan (opsional)", "Note (optional)"))
                         if (sheet == "out") Hint(tr("Di atas ${formatMinor(com.arthatis.wallet.bareng.WITHDRAW_THRESHOLD_MINOR, cur)} butuh persetujuan 2 anggota.", "Above ${formatMinor(com.arthatis.wallet.bareng.WITHDRAW_THRESHOLD_MINOR, cur)} needs 2 approvals."))
                     }

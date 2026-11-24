@@ -5,7 +5,21 @@ import kotlinx.serialization.json.Json
 
 val ledgerJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-@Serializable enum class WalletKind { rekening, tunai, ewallet, investasi }
+@Serializable enum class WalletKind { rekening, tunai, ewallet, investasi, biasa, kartu }
+
+/** Icon keys a wallet can use (the phone and the web draw them from the same list) and the colour palette. */
+val walletIconKeys = listOf("wallet", "bank", "cash", "phone", "card", "savings", "trending", "gift", "home", "car", "shopping", "coin")
+val walletColors = listOf("#1B6D35", "#006A6A", "#0061A4", "#6750A4", "#984061", "#BA1A1A", "#8B5000", "#6D5E00", "#4A6267", "#5C5F5C")
+
+/** Icon for wallets saved before icons existed. */
+fun legacyIcon(kind: WalletKind): String = when (kind) {
+    WalletKind.rekening -> "bank"; WalletKind.tunai -> "cash"; WalletKind.ewallet -> "phone"
+    WalletKind.investasi -> "trending"; WalletKind.kartu -> "card"; WalletKind.biasa -> "wallet"
+}
+
+/** Old wallets saved as rekening/tunai/ewallet behave as [biasa]. */
+val WalletKind.isCredit get() = this == WalletKind.kartu
+val WalletKind.isInvestment get() = this == WalletKind.investasi
 @Serializable enum class EntryKind { expense, income, transfer }
 @Serializable enum class Frequency { daily, weekly, monthly, yearly }
 
@@ -27,6 +41,10 @@ data class Wallet(
     val position: Int = 0,
     override val updatedAt: Long,
     override val deletedAt: Long? = null,
+    /** One of [walletIconKeys]; null on wallets from before icons existed (see [legacyIcon]). */
+    val icon: String? = null,
+    /** `#RRGGBB`, null = theme primary. */
+    val color: String? = null,
 ) : Syncable
 
 @Serializable
