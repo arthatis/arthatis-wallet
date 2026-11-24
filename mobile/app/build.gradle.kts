@@ -46,12 +46,20 @@ android {
 
     buildTypes {
         release {
-            // The ML Kit native libraries ship once per CPU; real phones are arm64-v8a, so the release APK carries only that.
-            ndk { abiFilters += listOf("arm64-v8a") }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    // The ML Kit native libraries are ~15 MB per CPU, so release builds produce one APK per CPU instead of one 70 MB universal APK.
+    splits {
+        abi {
+            isEnable = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            isUniversalApk = false
         }
     }
 
