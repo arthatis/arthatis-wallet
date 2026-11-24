@@ -16,8 +16,8 @@ android {
         applicationId = "com.arthatis.wallet"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.0.1"
+        versionCode = 2
+        versionName = "0.0.2"
     }
 
     // Release signing comes from mobile/keystore.properties (git-ignored: storeFile, storePassword, keyAlias, keyPassword).
@@ -46,7 +46,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // The ML Kit native libraries ship once per CPU; real phones are arm64-v8a, so the release APK carries only that.
+            ndk { abiFilters += listOf("arm64-v8a") }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
     }

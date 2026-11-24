@@ -73,7 +73,7 @@ Satu container melayani API (`/v1`) dan web mirror (`/`). Di aplikasi, pilih **V
 
 ## Pasang APK (pra-rilis)
 
-APK terbaru ada di [`releases/`](releases/) beserta checksum `.sha256` (`sha256sum -c arthatis-wallet-v0.0.1.apk.sha256`). Selama `0.0.x`, APK ditandatangani dengan **kunci debug** dan belum ada di Play Store; pasang manual (izinkan "pasang dari sumber ini"). Membuat APK baru: `mobile/release.sh` (versi dibaca dari `mobile/app/build.gradle.kts`). Tanda tangan rilis sungguhan memakai `mobile/keystore.properties` (tidak masuk repo). Riwayat versi: [CHANGELOG.md](CHANGELOG.md).
+APK terbaru ada di [`releases/`](releases/) beserta checksum `.sha256` (`sha256sum -c arthatis-wallet-v0.0.2.apk.sha256`). Selama `0.0.x`, APK ditandatangani dengan **kunci debug** dan belum ada di Play Store; pasang manual (izinkan "pasang dari sumber ini"). APK rilis hanya untuk HP 64-bit (arm64-v8a). Membuat APK baru: `mobile/release.sh` (versi dibaca dari `mobile/app/build.gradle.kts`). Tanda tangan rilis sungguhan memakai `mobile/keystore.properties` (tidak masuk repo). Riwayat versi: [CHANGELOG.md](CHANGELOG.md).
 
 ## Pengembangan
 

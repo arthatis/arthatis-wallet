@@ -2,7 +2,10 @@
 
 Versi mengikuti [SemVer](https://semver.org). Selama `0.0.x` ini adalah pra-rilis: belum di Play Store, belum diaudit, dan APK ditandatangani dengan kunci debug.
 
-## [Belum dirilis]
+## [0.0.2] — pra-rilis
+
+- **APK jauh lebih ringan**: 83 MB → 25 MB. R8 (minify + shrink resource) aktif untuk rilis, dan APK hanya memuat arm64-v8a (HP 64-bit, hampir semua HP sejak ~2017). HP 32-bit (armeabi-v7a) dan emulator x86 tidak didukung APK rilis; untuk emulator pakai build debug.
+- Berkas: `releases/arthatis-wallet-v0.0.2.apk` (+ `.sha256`).
 
 - Input nominal memakai pemisah ribuan sesuai mata uang (IDR `1.234.567`, USD/SGD/MYR `1,234.56`, EUR `1.234,56`) saat mengetik; keypad transaksi punya tombol desimal untuk mata uang berdesimal (sebelumnya angka di belakang koma tidak bisa dimasukkan).
 - Mata uang baru: MYR (RM) dan EUR.
