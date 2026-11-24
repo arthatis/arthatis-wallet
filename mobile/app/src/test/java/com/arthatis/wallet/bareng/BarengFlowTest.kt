@@ -95,6 +95,9 @@ private class Phone(val base: String, val name: String) {
  * The shared-wallet flow end to end with the real [Bareng] class and the real backend (a Node process).
  * Skipped automatically when Node or the backend dependencies are not available.
  */
+/** Rupiah in minor units (IDR keeps 4 decimals). */
+private fun rp(n: Long) = n * 10_000L
+
 class BarengFlowTest {
     companion object {
         private var server: Process? = null
@@ -129,7 +132,7 @@ class BarengFlowTest {
         val dewi = Phone(url, "Dewi").register()
 
         // 1. Create. The server only ever sees ciphertext; the owner reads the name back.
-        val gid = sinta.bareng.create(GroupMeta("Liburan Bali", "tabungan", "IDR", 12_000_000), "Sinta", "Jakarta")
+        val gid = sinta.bareng.create(GroupMeta("Liburan Bali", "tabungan", "IDR", rp(12_000_000)), "Sinta", "Jakarta")
         val listed = sinta.bareng.list().single()
         assertEquals("Liburan Bali", listed.meta?.name)
         assertEquals(1, listed.epoch)
@@ -157,14 +160,14 @@ class BarengFlowTest {
         nadia.bareng.list()
 
         // 6. Contributions sync between members.
-        bayu.bareng.addContribution(gid, Contribution(bayu.bareng.newContributionId(), bayu.vaultId, "contribution", 3_000_000, "Tabungan awal", 1, 0))
+        bayu.bareng.addContribution(gid, Contribution(bayu.bareng.newContributionId(), bayu.vaultId, "contribution", rp(3_000_000), "Tabungan awal", 1, 0))
         bayu.sync(gid); sinta.sync(gid)
-        assertEquals(3_000_000, sinta.net(gid))
+        assertEquals(rp(3_000_000), sinta.net(gid))
 
         // 7. A withdrawal above the threshold needs 2 managers; a plain member cannot vote.
-        val approvalId = bayu.bareng.requestWithdrawal(gid, 1, 2_000_000, "Tiket pesawat")
+        val approvalId = bayu.bareng.requestWithdrawal(gid, 1, rp(2_000_000), "Tiket pesawat")
         val seen = sinta.bareng.approvals(gid, 1).single()
-        assertEquals(2_000_000, seen.amountMinor); assertEquals("pending", seen.status); assertEquals(2, seen.required)
+        assertEquals(rp(2_000_000), seen.amountMinor); assertEquals("pending", seen.status); assertEquals(2, seen.required)
         assertEquals(403, assertFailsWith<ApiException> { bayu.bareng.vote(gid, approvalId, true) }.status)
         assertEquals("pending", sinta.bareng.vote(gid, approvalId, true))
         assertEquals("approved", nadia.bareng.vote(gid, approvalId, true))
@@ -172,7 +175,7 @@ class BarengFlowTest {
         bayu.bareng.settleApproved(gid, 1, bayu.vaultId, bayu.bareng.approvals(gid, 1)) // reopening must not duplicate
         assertEquals(1, bayu.dao.groupRows(gid).count { it.id.startsWith("w_") })
         bayu.sync(gid); sinta.sync(gid)
-        assertEquals(1_000_000, sinta.net(gid))
+        assertEquals(rp(1_000_000), sinta.net(gid))
 
         // 8. Removing a member rotates the key; old records are re-encrypted; the removed member is locked out.
         val oldKey = sinta.secrets.secret("gk.$gid.1")!!
@@ -187,7 +190,7 @@ class BarengFlowTest {
         val stale = GroupSummary(gid, "member", "active", 1, false, 2, null)
         bayu.bareng.list() // learns the epoch-2 key from its own envelope
         bayu.bareng.syncGroup(stale)
-        assertEquals(1_000_000, bayu.net(gid))
+        assertEquals(rp(1_000_000), bayu.net(gid))
         assertContentEquals(sinta.secrets.secret("gk.$gid.2"), bayu.secrets.secret("gk.$gid.2"))
 
         // Names and activity written before the rotation are still readable by members who kept the old key.
@@ -202,7 +205,7 @@ class BarengFlowTest {
         val dewiSummary = dewi.bareng.list().single()
         assertEquals("active", dewiSummary.status); assertEquals("Liburan Bali", dewiSummary.meta?.name)
         dewi.bareng.syncGroup(dewiSummary)
-        assertEquals(1_000_000, dewi.net(gid))
+        assertEquals(rp(1_000_000), dewi.net(gid))
         assertEquals("Sinta", dewi.bareng.detail(gid)!!.second.single { it.vaultId == sinta.vaultId }.name)
     }
 

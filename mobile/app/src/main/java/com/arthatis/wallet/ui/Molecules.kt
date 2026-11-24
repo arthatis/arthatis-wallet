@@ -101,7 +101,7 @@ fun hexColor(hex: String): Color? = runCatching { Color(android.graphics.Color.p
 fun walletKindLabel(kind: WalletKind): String = when (kind) {
     WalletKind.investasi -> tr("Investasi", "Investment")
     WalletKind.kartu -> tr("Kartu kredit", "Credit card")
-    else -> tr("Biasa", "Regular")
+    else -> tr("Tunai", "Cash")
 }
 
 /** Card surface: surfaceContainerHigh with a hairline outlineVariant border, radius 12 (shape/medium). Low alone was nearly invisible on surface. */

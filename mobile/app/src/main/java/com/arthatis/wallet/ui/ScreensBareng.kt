@@ -239,7 +239,7 @@ fun BarengDetailScreen(vm: AppViewModel, id: String) {
                     AppCard {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(tr("Penarikan ${formatMinor(a.amountMinor, cur)}", "Withdrawal ${formatMinor(a.amountMinor, cur)}"), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                            Hint(tr("Penarikan di atas ${formatMinor(com.arthatis.wallet.bareng.WITHDRAW_THRESHOLD_MINOR, cur)} butuh persetujuan ${a.required} anggota. Saat ini: ${a.approvals} menyetujui.", "Withdrawals above ${formatMinor(com.arthatis.wallet.bareng.WITHDRAW_THRESHOLD_MINOR, cur)} need ${a.required} approvals. So far: ${a.approvals}."))
+                            Hint(tr("Penarikan di atas ${formatMinor(com.arthatis.wallet.bareng.withdrawThresholdMinor(cur), cur)} butuh persetujuan ${a.required} anggota. Saat ini: ${a.approvals} menyetujui.", "Withdrawals above ${formatMinor(com.arthatis.wallet.bareng.withdrawThresholdMinor(cur), cur)} need ${a.required} approvals. So far: ${a.approvals}."))
                             if (a.note.isNotBlank()) Hint(a.note)
                             if (manager) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 AppButton(tr("Setujui", "Approve"), { vm.vote(v, a, true) }, size = BtnSize.S)
@@ -261,7 +261,7 @@ fun BarengDetailScreen(vm: AppViewModel, id: String) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         AmountField(amount, { amount = it }, cur, tr("Nominal ($cur)", "Amount ($cur)"))
                         AppTextField(note, { note = it }, tr("Catatan (opsional)", "Note (optional)"))
-                        if (sheet == "out") Hint(tr("Di atas ${formatMinor(com.arthatis.wallet.bareng.WITHDRAW_THRESHOLD_MINOR, cur)} butuh persetujuan 2 anggota.", "Above ${formatMinor(com.arthatis.wallet.bareng.WITHDRAW_THRESHOLD_MINOR, cur)} needs 2 approvals."))
+                        if (sheet == "out") Hint(tr("Di atas ${formatMinor(com.arthatis.wallet.bareng.withdrawThresholdMinor(cur), cur)} butuh persetujuan 2 anggota.", "Above ${formatMinor(com.arthatis.wallet.bareng.withdrawThresholdMinor(cur), cur)} needs 2 approvals."))
                     }
                 },
                 confirmButton = {

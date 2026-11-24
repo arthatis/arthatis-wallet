@@ -98,6 +98,7 @@ fun ArthatisApp(vm: AppViewModel, pickBackup: () -> Unit) {
                             Route.ImportPreview -> ImportPreviewScreen(vm)
                             Route.ServerSettings -> ServerSettingsScreen(vm)
                             Route.Recurring -> RecurringScreen(vm)
+                            is Route.EditWallet -> AddWalletScreen(vm, r.id)
                             is Route.RecurringForm -> RecurringFormScreen(vm, r.id)
                             Route.Categories -> CategoriesScreen(vm)
                             Route.AiSettings -> AiSettingsScreen(vm)

@@ -80,16 +80,17 @@ const log = async (v: GroupView, text: string) => {
   await session.api.call("POST", `/v1/groups/${v.row.id}/activity`, { payload: C.sealText(key, JSON.stringify({ text, at: Date.now() }), G.activityAad(v.row.id)) }).catch(() => {});
 };
 const myName = () => session.ledger().profile?.name ?? "—";
-export const WITHDRAW_THRESHOLD = 1_000_000;
+/** Rp1.000.000 for IDR; other currencies keep 1.000.000 minor units. */
+export const withdrawThreshold = (currency: string) => (currency === "IDR" ? toMinor(1_000_000, "IDR") : 1_000_000);
 
 export async function contribute(v: GroupView, withdraw: boolean): Promise<boolean> {
   const m = v.row.meta!;
-  const f = await dialog(withdraw ? t("Tarik dana", "Withdraw") : t("Tambah kontribusi", "Add contribution"), `${field("amount", `${t("Nominal", "Amount")} (${m.currency})`, "", { required: true, amount: m.currency, hint: withdraw ? t(`Di atas ${formatMinor(WITHDRAW_THRESHOLD, m.currency)} butuh persetujuan 2 anggota.`, `Above ${formatMinor(WITHDRAW_THRESHOLD, m.currency)} needs 2 approvals.`) : "" })}${field("note", t("Catatan (opsional)", "Note (optional)"))}`);
+  const f = await dialog(withdraw ? t("Tarik dana", "Withdraw") : t("Tambah kontribusi", "Add contribution"), `${field("amount", `${t("Nominal", "Amount")} (${m.currency})`, "", { required: true, amount: m.currency, hint: withdraw ? t(`Di atas ${formatMinor(withdrawThreshold(m.currency), m.currency)} butuh persetujuan 2 anggota.`, `Above ${formatMinor(withdrawThreshold(m.currency), m.currency)} needs 2 approvals.`) : "" })}${field("note", t("Catatan (opsional)", "Note (optional)"))}`);
   if (!f) return false;
   const value = evaluateAmount(String(f.get("amount")), m.currency); if (!value || value <= 0) { toast(t("Nominal tidak valid.", "Invalid amount.")); return false; }
   const minor = toMinor(value, m.currency); const note = String(f.get("note") ?? "").trim();
   try {
-    if (withdraw && minor > WITHDRAW_THRESHOLD) {
+    if (withdraw && minor > withdrawThreshold(m.currency)) {
       const key = keyFor(v.row.id, v.row.epoch)!;
       await session.api.call("POST", `/v1/groups/${v.row.id}/approvals`, { kind: "withdrawal", required: 2, payload: C.sealText(key, JSON.stringify({ amountMinor: minor, note }), G.approvalAad(v.row.id)) });
       await log(v, `${myName()} ${t("meminta penarikan", "requested a withdrawal")}`);

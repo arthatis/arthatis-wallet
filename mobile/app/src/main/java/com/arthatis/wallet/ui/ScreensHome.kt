@@ -237,7 +237,7 @@ fun WalletDetailScreen(vm: AppViewModel, id: String) {
         return "${if (pct >= 0) "+" else "−"}${"%.1f".format(kotlin.math.abs(pct)).replace('.', ',')}% vs $lastMo"
     }
     Column(Modifier.fillMaxSize()) {
-        TopBar(wallet.name, onBack = { vm.back() })
+        TopBar(wallet.name, onBack = { vm.back() }, actions = { AppIconButton(Icons.Rounded.Edit, { vm.go(Route.EditWallet(wallet.id)) }, description = tr("Ubah dompet", "Edit wallet")) })
         Page {
             AppCard(padding = 20.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

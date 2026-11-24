@@ -74,9 +74,9 @@ fun toCsv(data: ArchiveData): String {
         sb.append(dayOf(t.occurredAt)).append(',')
             .append(q(w?.name ?: "")).append(',').append(t.kind.name).append(',')
             .append(q(cats[t.categoryId]?.name ?: "")).append(',')
-            .append(toMajor(t.amountMinor, cur.ifBlank { "IDR" }).toPlainString()).append(',').append(cur).append(',')
+            .append(toMajor(t.amountMinor, cur.ifBlank { "IDR" }).stripTrailingZeros().toPlainString()).append(',').append(cur).append(',')
             .append(q(t.toWalletId?.let { wallets[it]?.name } ?: "")).append(',')
-            .append(t.toAmountMinor?.let { toMajor(it, wallets[t.toWalletId]?.currency ?: "IDR").toPlainString() } ?: "").append(',')
+            .append(t.toAmountMinor?.let { toMajor(it, wallets[t.toWalletId]?.currency ?: "IDR").stripTrailingZeros().toPlainString() } ?: "").append(',')
             .append(q(t.note)).append('\n')
     }
     return sb.toString()

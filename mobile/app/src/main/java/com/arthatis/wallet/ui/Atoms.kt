@@ -129,9 +129,9 @@ fun Fab(icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier, d
 }
 
 @Composable
-fun AppChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null) {
+fun AppChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, leading: ImageVector? = null, enabled: Boolean = true) {
     FilterChip(
-        selected = selected, onClick = onClick, modifier = modifier.heightIn(min = 32.dp),
+        selected = selected, onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = 32.dp),
         label = { Text(label, style = MaterialTheme.typography.labelLarge) },
         leadingIcon = when {
             selected -> ({ Icon(Icons.Rounded.Check, null, Modifier.size(18.dp)) })

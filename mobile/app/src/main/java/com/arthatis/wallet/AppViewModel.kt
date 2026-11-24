@@ -66,6 +66,7 @@ sealed interface Route {
     data object ServerSettings : Route
     data object Recurring : Route
     data class RecurringForm(val id: String? = null) : Route
+    data class EditWallet(val id: String) : Route
     data object Categories : Route
     data object AiSettings : Route
     data object Budgets : Route
@@ -235,6 +236,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             runSync()
         }
     }
+
+    /** Name, icon, colour and opening balance can change; type and currency never do. */
+    fun updateWallet(w: Wallet) { viewModelScope.launch { repo.saveWallet(w); runSync() } }
 
     fun saveTx(tx: Tx) { viewModelScope.launch { repo.saveTx(tx); runSync() } }
     fun deleteTx(tx: Tx) { viewModelScope.launch { repo.deleteTx(tx); runSync() } }
@@ -485,7 +489,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val me = prefs.vaultId ?: return@launch
             val epoch = group.summary.epoch
             val name = myName()
-            if (withdraw && amountMinor > com.arthatis.wallet.bareng.WITHDRAW_THRESHOLD_MINOR) {
+            if (withdraw && amountMinor > com.arthatis.wallet.bareng.withdrawThresholdMinor(group.summary.meta?.currency ?: "IDR")) {
                 bareng.requestWithdrawal(group.summary.id, epoch, amountMinor, note)
                 bareng.logActivity(group.summary.id, epoch, "$name meminta penarikan")
             } else {

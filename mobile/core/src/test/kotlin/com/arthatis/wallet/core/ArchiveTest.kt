@@ -6,9 +6,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
+/** Rupiah in minor units (IDR keeps 4 decimals). */
+private fun rp(n: Long) = n * 10_000L
+
 class ArchiveTest {
-    private val wallet = Wallet("w1", "BCA", WalletKind.rekening, "IDR", 1_000, updatedAt = 10)
-    private val tx = Tx("t1", "w1", null, null, EntryKind.expense, 25_000, note = "Bakso, \"Pak Kumis\"", occurredAt = 1_763_600_000_000, updatedAt = 10)
+    private val wallet = Wallet("w1", "BCA", WalletKind.rekening, "IDR", rp(1_000), updatedAt = 10)
+    private val tx = Tx("t1", "w1", null, null, EntryKind.expense, rp(25_000), note = "Bakso, \"Pak Kumis\"", occurredAt = 1_763_600_000_000, updatedAt = 10)
     private val data = ArchiveData(createdAt = 5, device = "Pixel 8", wallets = listOf(wallet), transactions = listOf(tx))
 
     @Test fun encryptedRoundTripAndWrongKey() {
@@ -44,12 +47,12 @@ class ArchiveTest {
 class CsvImportTest {
     @Test fun csvRoundTripsAndIsIdempotent() {
         val wallets = listOf(Wallet("w1", "BCA", WalletKind.rekening, "IDR", 0, updatedAt = 1))
-        val tx = Tx("t1", "w1", null, "cat_food", EntryKind.expense, 25_000, note = "Bakso, enak", occurredAt = epochMillis(java.time.LocalDate.of(2026, 11, 20)), updatedAt = 1)
+        val tx = Tx("t1", "w1", null, "cat_food", EntryKind.expense, rp(25_000), note = "Bakso, enak", occurredAt = epochMillis(java.time.LocalDate.of(2026, 11, 20)), updatedAt = 1)
         val cats = listOf(Category("cat_food", "food", "Makanan", EntryKind.expense, "#1B6D35", false, 0, 1))
         val csv = toCsv(ArchiveData(createdAt = 1, wallets = wallets, categories = cats, transactions = listOf(tx)))
         val a = csvToArchive(csv, 5)!!
         assertEquals(1, a.transactions.size)
-        assertEquals(25_000L, a.transactions[0].amountMinor)
+        assertEquals(rp(25_000), a.transactions[0].amountMinor)
         assertEquals("Bakso, enak", a.transactions[0].note)
         assertEquals("BCA", a.wallets[0].name)
         assertEquals(a.transactions[0].id, csvToArchive(csv, 9)!!.transactions[0].id)

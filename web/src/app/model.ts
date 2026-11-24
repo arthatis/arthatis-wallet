@@ -27,11 +27,11 @@ export const emptyLedger = (): Ledger => ({ wallets: [], categories: [], txs: []
 
 /** group = thousands separator, decimal = fraction mark. IDR and EUR use `.` / `,`; the rest `,` / `.`. Same as the phone. */
 export const CURRENCIES = [
-  { code: "IDR", scale: 0, symbol: "Rp", group: ".", decimal: "," }, { code: "USD", scale: 2, symbol: "$", group: ",", decimal: "." },
+  { code: "IDR", scale: 4, symbol: "Rp", group: ".", decimal: ",", trim: true }, { code: "USD", scale: 2, symbol: "$", group: ",", decimal: "." },
   { code: "SGD", scale: 2, symbol: "S$", group: ",", decimal: "." }, { code: "MYR", scale: 2, symbol: "RM", group: ",", decimal: "." },
   { code: "EUR", scale: 2, symbol: "\u20ac", group: ".", decimal: "," },
 ];
-const info = (code: string) => CURRENCIES.find((c) => c.code === code) ?? { code, scale: 2, symbol: code, group: ",", decimal: "." };
+const info = (code: string): { code: string; scale: number; symbol: string; group: string; decimal: string; trim?: boolean } => CURRENCIES.find((c) => c.code === code) ?? { code, scale: 2, symbol: code, group: ",", decimal: "." };
 
 export const WALLET_ICONS = ["wallet", "bank", "cash", "phone", "card", "savings", "trending", "gift", "home", "car", "shopping", "coin"];
 export const WALLET_COLORS = ["#1B6D35", "#006A6A", "#0061A4", "#6750A4", "#984061", "#BA1A1A", "#8B5000", "#6D5E00", "#4A6267", "#5C5F5C"];
@@ -73,11 +73,13 @@ export function evaluateAmount(raw: string, currency: string): number | null {
 export type Sign = "none" | "plus" | "minus";
 /** `Rp14.125.000`, `$1,060.79`, `\u20ac1.060,79`, `+Rp8.500.000`, `−Rp25.000` — same as the phone. */
 export function formatMinor(minor: number, currency: string, sign: Sign = "none"): string {
-  const { scale, symbol } = info(currency);
+  const { scale, symbol, trim } = info(currency);
   const abs = Math.abs(minor);
   const { group, decimal } = info(currency);
   const whole = Math.floor(abs / 10 ** scale).toString().replace(/\B(?=(\d{3})+(?!\d))/g, group);
-  const frac = scale ? decimal + (abs % 10 ** scale).toString().padStart(scale, "0") : "";
+  const raw = scale ? (abs % 10 ** scale).toString().padStart(scale, "0") : "";
+  const digits = trim ? raw.replace(/0+$/, "") : raw;
+  const frac = digits ? decimal + digits : "";
   const prefix = sign === "plus" ? "+" : sign === "minus" ? "−" : minor < 0 ? "−" : "";
   return `${prefix}${symbol}${whole}${frac}`;
 }

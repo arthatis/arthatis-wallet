@@ -64,13 +64,17 @@ import java.time.ZoneOffset
 @Composable
 private fun Keypad(currency: String, onKey: (String) -> Unit) {
     val info = com.arthatis.wallet.core.currencyInfo(currency)
-    // Whole-unit currencies (IDR) get the 45k shortcut; the others get a decimal key labelled with their own mark.
-    val extra = if (info.scale == 0) "k" else info.decimal.toString()
-    val rows = listOf(listOf("7", "8", "9", "⌫"), listOf("4", "5", "6", "+"), listOf("1", "2", "3", "−"), listOf(extra, "0", "000", "×"))
+    // Every currency gets a decimal key labelled with its own mark; IDR also keeps the 45k shortcut on an extra row.
+    val rows = buildList {
+        add(listOf("7", "8", "9", "⌫")); add(listOf("4", "5", "6", "+")); add(listOf("1", "2", "3", "−"))
+        add(listOf(info.decimal.toString(), "0", "000", "×"))
+        if (currency == "IDR") add(listOf("k", "", "", ""))
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         rows.forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { key ->
+                    if (key.isEmpty()) { Box(Modifier.weight(1f).height(52.dp)); return@forEach }
                     Box(
                         Modifier.weight(1f).height(52.dp).clip(RoundedCornerShape(Radius.medium))
                             .background(if (key in listOf("+", "−", "×", "⌫", "k", info.decimal.toString())) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
@@ -119,7 +123,7 @@ fun AddTxScreen(vm: AppViewModel, route: Route.AddTx) {
         val token = expr.takeLastWhile { it.isDigit() || it == '.' }
         expr = when {
             k == "⌫" -> expr.dropLast(1)
-            k == info.decimal.toString() && info.scale > 0 -> if ('.' in token) expr else (if (token.isEmpty()) expr + "0." else "$expr.")
+            k == info.decimal.toString() -> if ('.' in token) expr else (if (token.isEmpty()) expr + "0." else "$expr.")
             // Never take more fraction digits than the currency has: they would be rounded away silently.
             k.all { it.isDigit() } && '.' in token && token.substringAfter('.').length + k.length > info.scale -> expr
             else -> expr + k
@@ -197,32 +201,36 @@ fun AddTxScreen(vm: AppViewModel, route: Route.AddTx) {
     }
 }
 
-/** M17 */
+/** M17 (add) and edit. When editing, type and currency stay fixed; name, icon, colour and opening balance can change. */
 @Composable
-fun AddWalletScreen(vm: AppViewModel) {
+fun AddWalletScreen(vm: AppViewModel, editId: String? = null) {
     val ledger by vm.ledger.collectAsState()
-    var name by remember { mutableStateOf("") }
-    var kind by remember { mutableStateOf(WalletKind.biasa) }
-    var icon by remember { mutableStateOf("wallet") }
-    var color by remember { mutableStateOf<String?>(null) }
-    var currency by remember { mutableStateOf(ledger.profile?.primaryCurrency ?: "IDR") }
-    var opening by remember { mutableStateOf("") }
+    val existing = editId?.let { ledger.wallet(it) }
+    var name by remember { mutableStateOf(existing?.name ?: "") }
+    var kind by remember { mutableStateOf(existing?.kind?.let { if (it == WalletKind.investasi || it == WalletKind.kartu) it else WalletKind.biasa } ?: WalletKind.biasa) }
+    var icon by remember { mutableStateOf(existing?.let { it.icon ?: legacyIcon(it.kind) } ?: "wallet") }
+    var color by remember { mutableStateOf(existing?.color) }
+    var currency by remember { mutableStateOf(existing?.currency ?: ledger.profile?.primaryCurrency ?: "IDR") }
+    var opening by remember { mutableStateOf(existing?.let { if (it.openingMinor == 0L) "" else com.arthatis.wallet.core.toMajor(it.openingMinor, it.currency).stripTrailingZeros().toPlainString() } ?: "") }
     Column(Modifier.fillMaxSize()) {
-        TopBar(tr("Tambah dompet", "Add wallet"), onBack = { vm.back() })
+        TopBar(if (existing == null) tr("Tambah dompet", "Add wallet") else tr("Ubah dompet", "Edit wallet"), onBack = { vm.back() })
         Page {
             AppTextField(name, { name = it }, tr("Nama dompet", "Wallet name"), supporting = tr("Contoh: Wise, Jenius, Celengan.", "Example: Wise, Jenius, Piggy bank."))
             FieldLabel(tr("Tipe", "Type"))
-            ChipRow { listOf(WalletKind.biasa, WalletKind.investasi, WalletKind.kartu).forEach { k -> AppChip(walletKindLabel(k), kind == k, { kind = k; if (icon == "wallet" || icon == "trending" || icon == "card") icon = legacyIcon(k) }) } }
+            ChipRow { listOf(WalletKind.biasa, WalletKind.investasi, WalletKind.kartu).forEach { k -> AppChip(walletKindLabel(k), kind == k, { if (existing == null) { kind = k; if (icon == "wallet" || icon == "trending" || icon == "card") icon = legacyIcon(k) } }, enabled = existing == null) } }
+            if (existing != null) Hint(tr("Tipe dan mata uang tidak bisa diubah setelah dompet dibuat.", "Type and currency can't be changed once the wallet is created."))
             if (kind == WalletKind.kartu) Hint(tr("Saldo boleh minus dan dihitung sebagai utang, di luar total kas.", "Balance may go negative and counts as debt, outside the cash total."))
             if (kind == WalletKind.investasi) Hint(tr("Dihitung terpisah dari total kas di Beranda.", "Counted apart from the cash total on Home."))
             WalletStyleFields(icon, { icon = it }, color, { color = it })
             FieldLabel(tr("Mata uang", "Currency"))
-            ChipRow { supportedCurrencies.forEach { c -> AppChip("${c.code} ${c.symbol}", currency == c.code, { currency = c.code }) } }
-            Hint(tr("1 dompet hanya 1 mata uang — tidak bisa diubah setelah dompet dibuat.", "1 wallet holds 1 currency — it can't be changed once the wallet is created."))
+            ChipRow { supportedCurrencies.forEach { c -> AppChip("${c.code} ${c.symbol}", currency == c.code, { if (existing == null) currency = c.code }, enabled = existing == null) } }
+            if (existing == null) Hint(tr("1 dompet hanya 1 mata uang — tidak bisa diubah setelah dompet dibuat.", "1 wallet holds 1 currency — it can't be changed once the wallet is created."))
             AmountField(opening, { opening = it }, currency, tr("Saldo awal (opsional)", "Opening balance (optional)"), supporting = tr("Dalam mata uang dompet yang dipilih.", "In the wallet's currency."))
-            AppButton(tr("Simpan dompet", "Save wallet"), {
+            AppButton(if (existing == null) tr("Simpan dompet", "Save wallet") else tr("Simpan perubahan", "Save changes"), {
                 val minor = evaluateExpression(opening)?.let { runCatching { toMinor(it, currency) }.getOrNull() } ?: 0L
-                vm.saveWallet(name.trim(), kind, currency, minor, icon, color); vm.back()
+                if (existing == null) vm.saveWallet(name.trim(), kind, currency, minor, icon, color)
+                else vm.updateWallet(existing.copy(name = name.trim(), icon = icon, color = color, openingMinor = minor))
+                vm.back()
             }, Modifier.fillMaxWidth(), enabled = name.isNotBlank())
         }
     }

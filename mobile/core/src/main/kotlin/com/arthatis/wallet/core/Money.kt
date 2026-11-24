@@ -4,11 +4,15 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 /** [group] separates thousands, [decimal] the fraction. Symbols are always a prefix. */
-data class CurrencyInfo(val code: String, val scale: Int, val symbol: String, val group: Char = ',', val decimal: Char = '.')
+data class CurrencyInfo(
+    val code: String, val scale: Int, val symbol: String, val group: Char = ',', val decimal: Char = '.',
+    /** Hide the fraction when it is all zeros and drop trailing zeros (`Rp14.125.000`, `Rp1.234,5`). */
+    val trimFraction: Boolean = false,
+)
 
-/** IDR, USD, SGD, MYR, EUR. One wallet holds exactly one. IDR and EUR group with `.` and use `,` for decimals; the rest the other way round. */
+/** IDR (4 decimals, for crypto-style amounts), USD, SGD, MYR, EUR. One wallet holds exactly one. IDR and EUR group with `.` and use `,` for decimals; the rest the other way round. */
 val supportedCurrencies = listOf(
-    CurrencyInfo("IDR", 0, "Rp", '.', ','),
+    CurrencyInfo("IDR", 4, "Rp", '.', ',', trimFraction = true),
     CurrencyInfo("USD", 2, "$"),
     CurrencyInfo("SGD", 2, "S$"),
     CurrencyInfo("MYR", 2, "RM"),
@@ -31,7 +35,8 @@ fun formatMinor(amountMinor: Long, currency: String, sign: Sign = Sign.None): St
     val plain = abs.setScale(info.scale, RoundingMode.HALF_UP).toPlainString()
     val parts = plain.split('.')
     val whole = group(parts[0], info.group)
-    val text = if (info.scale == 0) whole else "$whole${info.decimal}${parts[1]}"
+    val fraction = if (info.scale == 0) "" else if (info.trimFraction) parts[1].trimEnd('0') else parts[1]
+    val text = if (fraction.isEmpty()) whole else "$whole${info.decimal}$fraction"
     val prefix = when {
         sign == Sign.Plus -> "+"
         sign == Sign.Minus -> "−"

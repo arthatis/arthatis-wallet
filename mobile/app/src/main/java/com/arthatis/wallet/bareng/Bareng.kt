@@ -30,7 +30,8 @@ import kotlinx.serialization.json.putJsonObject
 import java.util.UUID
 
 /** Withdrawals above this need [APPROVALS_REQUIRED] manager votes (design M09). Amounts are encrypted, so the client decides. */
-const val WITHDRAW_THRESHOLD_MINOR = 1_000_000L
+/** Rp1.000.000 for IDR; other currencies keep 1.000.000 minor units. */
+fun withdrawThresholdMinor(currency: String): Long = if (currency == "IDR") com.arthatis.wallet.core.toMinor(java.math.BigDecimal(1_000_000), "IDR") else 1_000_000L
 const val APPROVALS_REQUIRED = 2
 
 @Serializable

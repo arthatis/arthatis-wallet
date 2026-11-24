@@ -10,7 +10,7 @@ import { fetchRates } from "./rates";
 
 export interface Ctx { ledger: Ledger; rates: Rates; currency: string; navigate: (page: string) => void; rerender: () => void }
 
-const KIND: Partial<Record<WalletKind, [string, string]>> = { biasa: ["Biasa", "Regular"], investasi: ["Investasi", "Investment"], kartu: ["Kartu kredit", "Credit card"] };
+const KIND: Partial<Record<WalletKind, [string, string]>> = { biasa: ["Tunai", "Cash"], investasi: ["Investasi", "Investment"], kartu: ["Kartu kredit", "Credit card"] };
 const kindLabel = (k: WalletKind) => t(...(KIND[k] ?? KIND.biasa!));
 /** Old rekening/tunai/ewallet wallets count as regular. */
 const typeOf = (k: WalletKind): WalletKind => (k === "investasi" || k === "kartu" ? k : "biasa");
@@ -162,17 +162,17 @@ function pickers(icon0: string, color0: string): string {
 }
 
 export async function walletDialog(c: Ctx, existing?: Wallet) {
-  const body = `${field("name", t("Nama dompet", "Wallet name"), existing?.name ?? "", { required: true })}${select("kind", t("Tipe", "Type"), (["biasa", "investasi", "kartu"] as WalletKind[]).map((k) => [k, kindLabel(k)]), existing ? typeOf(existing.kind) : "biasa")}
-    <p class="muted small">${t("Kartu kredit: saldo boleh minus, dihitung sebagai utang di luar total kas. Investasi: dihitung terpisah.", "Credit card: balance may go negative and counts as debt outside the cash total. Investment: counted apart.")}</p>
+  const body = `${field("name", t("Nama dompet", "Wallet name"), existing?.name ?? "", { required: true })}${existing ? `<div class="field"><label>${t("Tipe", "Type")}</label><input value="${esc(kindLabel(existing.kind))}" disabled></div>` : select("kind", t("Tipe", "Type"), (["biasa", "investasi", "kartu"] as WalletKind[]).map((k) => [k, kindLabel(k)]), "biasa")}
+    <p class="muted small">${existing ? t("Tipe dan mata uang tidak bisa diubah setelah dompet dibuat.", "Type and currency can't be changed once the wallet is created.") : t("Kartu kredit: saldo boleh minus, dihitung sebagai utang di luar total kas. Investasi: dihitung terpisah.", "Credit card: balance may go negative and counts as debt outside the cash total. Investment: counted apart.")}</p>
     ${pickers(existing ? walletIconKey(existing) : "wallet", existing?.color ?? "")}
     ${existing ? `<div class="field"><label>${t("Mata uang", "Currency")}</label><input value="${existing.currency}" disabled></div>` : select("currency", t("Mata uang", "Currency"), CURRENCIES.map((x) => [x.code, `${x.code} ${x.symbol}`]), c.currency)}
-    ${existing ? "" : field("opening", t("Saldo awal (opsional)", "Opening balance (optional)"), "", { amount: c.currency })}
+    ${field("opening", t("Saldo awal (opsional)", "Opening balance (optional)"), existing ? amountText(existing.openingMinor, existing.currency) : "", { amount: existing?.currency ?? c.currency })}
 `;
   const f = await dialog(existing ? t("Ubah dompet", "Edit wallet") : t("Tambah dompet", "Add wallet"), body);
   if (!f) return;
   const currency = existing?.currency ?? String(f.get("currency"));
-  const opening = existing ? existing.openingMinor : toMinor(evaluateAmount(String(f.get("opening") ?? ""), currency) ?? 0, currency);
-  session.put(ENTITY.wallet, { ...(existing ?? { id: newId(), position: live(c.ledger.wallets).length, deletedAt: null, updatedAt: 0 }), name: String(f.get("name")).trim(), kind: String(f.get("kind")) as WalletKind, icon: String(f.get("icon") ?? "wallet"), color: String(f.get("color") ?? "") || null, currency, openingMinor: opening });
+  const opening = toMinor(evaluateAmount(String(f.get("opening") ?? ""), currency) ?? 0, currency);
+  session.put(ENTITY.wallet, { ...(existing ?? { id: newId(), position: live(c.ledger.wallets).length, deletedAt: null, updatedAt: 0 }), name: String(f.get("name")).trim(), kind: existing ? existing.kind : (String(f.get("kind")) as WalletKind), icon: String(f.get("icon") ?? "wallet"), color: String(f.get("color") ?? "") || null, currency, openingMinor: opening });
   toast(t("Dompet disimpan.", "Wallet saved."));
 }
 
