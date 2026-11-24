@@ -1,0 +1,28 @@
+---
+import "../styles/app.css";
+---
+<!doctype html>
+<html lang="id" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Arthatis Wallet</title>
+    <meta name="description" content="Arthatis Wallet Web — mirror dompet dari ponselmu. E2EE, open source." />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/design/wave.png" />
+    <script is:inline>
+      (function () {
+        var c = localStorage.getItem("theme") || "system";
+        var dark = c === "dark" || (c === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        document.documentElement.lang = localStorage.getItem("lang") === "en" ? "en" : "id";
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root" aria-live="polite"></div>
+    <script>
+      import "../app/main";
+    </script>
+  </body>
+</html>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Arthatis Wallet</string>
+    <string name="camera_denied">Izin kamera ditolak.</string>
+    <string name="saved">Tersimpan.</string>
+    <string name="copied">Tautan disalin.</string>
+</resources>

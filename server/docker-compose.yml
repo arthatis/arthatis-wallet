@@ -1,0 +1,14 @@
+services:
+  arthatis:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    env_file:
+      - .env
+    volumes:
+      - arthatis-data:/data
+volumes:
+  arthatis-data:

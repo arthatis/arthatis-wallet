@@ -1,0 +1,28 @@
+{
+  "name": "@arthatis/wallet-web",
+  "private": true,
+  "version": "0.0.1",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "PUBLIC_API_URL=${PUBLIC_API_URL:-http://localhost:8787} astro dev",
+    "build": "astro check && astro build",
+    "preview": "astro preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^1.2.1",
+    "@noble/curves": "^1.8.1",
+    "@noble/hashes": "^1.7.1",
+    "@noble/post-quantum": "^0.2.1",
+    "astro": "^5.15.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@types/qrcode": "^1.5.5",
+    "fake-indexeddb": "^6.2.8",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
