@@ -15,10 +15,7 @@ captures/
 .kotlin/
 *.apk
 *.aab
-# …except versioned releases in releases/
-!releases/
-!releases/*.apk
-!releases/*.sha256
+# APKs are published as GitHub Release assets (see mobile/release.sh), never committed. mobile/dist/ is the local output.
 
 # Secrets and signing: never commit these
 .env

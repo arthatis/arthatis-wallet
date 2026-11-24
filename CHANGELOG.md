@@ -8,7 +8,7 @@ Versi mengikuti [SemVer](https://semver.org). Selama `0.0.x` ini adalah pra-rili
   - `arm64-v8a`: HP 64-bit (hampir semua HP sejak ~2017), 25 MB.
   - `armeabi-v7a`: HP 32-bit lama, 19 MB.
   - `x86_64` dan `x86`: emulator dan perangkat Intel/ChromeOS, 27 MB.
-- Berkas: `releases/arthatis-wallet-v0.0.2-<cpu>.apk` (+ `.sha256` masing-masing).
+- Berkas: aset GitHub Release `v0.0.2` (`arthatis-wallet-v0.0.2-<cpu>.apk` + `SHA256SUMS`).
 
 - Input nominal memakai pemisah ribuan sesuai mata uang (IDR `1.234.567`, USD/SGD/MYR `1,234.56`, EUR `1.234,56`) saat mengetik; keypad transaksi punya tombol desimal untuk mata uang berdesimal (sebelumnya angka di belakang koma tidak bisa dimasukkan).
 - Mata uang baru: MYR (RM) dan EUR.
@@ -24,4 +24,4 @@ Pertama kali Arthatis Wallet v2 dapat dipasang.
 - **Server**: sinkron E2EE (XChaCha20-Poly1305, X25519 + ML-KEM-768), vault tanpa akun, email pemulihan opsional (SMTP), Bareng, admin API, aktivasi vault untuk hosted.
 - **Web mirror**: login QR, CRUD penuh, laporan, Chat AI, Bareng, halaman Admin.
 - Belum ada: iOS, billing, deep link undangan Android. Kriptografi belum diaudit pihak ketiga.
-- Berkas: `releases/arthatis-wallet-v0.0.1.apk` (+ `.sha256`).
+- Berkas: aset GitHub Release `v0.0.1`.
