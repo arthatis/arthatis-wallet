@@ -254,3 +254,96 @@ class EmailEntryTest {
         assertEquals(false, isWatchedSender("news@tokopedia.com", defaultEmailSenders))
     }
 }
+
+class Round2Test {
+    private val day = 86_400_000L
+
+    @Test fun openingBalanceIsNeverIncome() {
+        val w = Wallet("c", "Tunai", WalletKind.biasa, "IDR", rp(5_000_000), updatedAt = 1)
+        val flow = periodFlow(emptyList(), mapOf("c" to w), "IDR", Rates(), 0, 30 * day)!!
+        assertEquals(0L, flow.incomeMinor)
+        val tx = Tx("1", "c", null, "food", EntryKind.expense, rp(100_000), occurredAt = 10 * day, updatedAt = 1)
+        val r = buildReport(listOf(w), listOf(tx), "IDR", Rates(), 5 * day, 20 * day)!!
+        assertEquals(0L, r.incomeMinor)
+        assertEquals(rp(5_000_000), r.openingMinor)
+        assertEquals(rp(4_900_000), r.netWorthMinor)
+        assertEquals(rp(5_000_000), r.wallets.single().openingMinor)
+        assertEquals(0L, r.wallets.single().inMinor)
+    }
+
+    @Test fun reportGroupsByCategory() {
+        val w = Wallet("c", "Tunai", WalletKind.biasa, "IDR", 0, updatedAt = 1)
+        val txs = listOf(
+            Tx("1", "c", null, "food", EntryKind.expense, rp(10_000), occurredAt = 1 * day, updatedAt = 1),
+            Tx("2", "c", null, "food", EntryKind.expense, rp(20_000), occurredAt = 2 * day, updatedAt = 1),
+            Tx("3", "c", null, "fun", EntryKind.expense, rp(5_000), occurredAt = 3 * day, updatedAt = 1),
+        )
+        val g = buildReport(listOf(w), txs, "IDR", Rates(), 0, 10 * day)!!.groups
+        assertEquals(listOf("food", "fun"), g.map { it.categoryId })
+        assertEquals(rp(30_000), g[0].totalMinor)
+        assertEquals(listOf("2", "1"), g[0].transactions.map { it.id })
+    }
+
+    @Test fun transferByReceivedAmountAndFee() {
+        val bca = Wallet("bca", "BCA", WalletKind.biasa, "IDR", 0, updatedAt = 1)
+        val wise = Wallet("wise", "Wise", WalletKind.biasa, "USD", 0, updatedAt = 1)
+        val usd = { n: String -> toMinor(BigDecimal(n), "USD") }
+        // Sent Rp1.645.000, got $100 gross, $1 fee: rate 16450, wallet gets $99.
+        val t = assertNotNull(buildTransfer("t", bca, wise, rp(1_645_000), Rates(), null, 0, 0, receivedMinor = usd("100"), feeMinor = usd("1")))
+        assertEquals("16450", t.rate)
+        assertEquals(usd("99"), t.toAmountMinor)
+        assertEquals(usd("1"), t.feeMinor)
+        assertEquals(usd("99"), walletBalance(wise, listOf(t)))
+        val other = Wallet("ovo", "OVO", WalletKind.biasa, "IDR", 0, updatedAt = 1)
+        val same = assertNotNull(buildTransfer("s", bca, other, rp(100_000), Rates(), null, 0, 0, feeMinor = rp(2_500), categoryId = "transfer"))
+        assertEquals(rp(97_500), same.toAmountMinor); assertEquals("transfer", same.categoryId)
+        assertNull(buildTransfer("x", bca, other, rp(1_000), Rates(), null, 0, 0, feeMinor = rp(2_000)))
+    }
+
+    @Test fun cardsNeverRankAsTopAssets() {
+        val cash = Wallet("c", "Tunai", WalletKind.biasa, "IDR", rp(10_000), updatedAt = 1)
+        val card = Wallet("k", "Kartu", WalletKind.kartu, "IDR", rp(50_000_000), updatedAt = 1, creditLimitMinor = rp(50_000_000))
+        assertEquals(listOf("c", "k"), walletsByBalance(listOf(card, cash), emptyList(), "IDR", Rates()).map { it.id })
+    }
+
+    @Test fun cardReminderOnH3AndDueDay() {
+        assertEquals(3, cardReminderDays(25, LocalDate.of(2026, 11, 22)))
+        assertEquals(0, cardReminderDays(25, LocalDate.of(2026, 11, 25)))
+        assertNull(cardReminderDays(25, LocalDate.of(2026, 11, 23)))
+        // Day 31 in a 30-day month falls on the 30th.
+        assertEquals(3, cardReminderDays(31, LocalDate.of(2026, 11, 27)))
+        assertEquals(0, cardReminderDays(31, LocalDate.of(2027, 2, 28)))
+    }
+
+    @Test fun receiptKeepsOnlyProducts() {
+        val lines = parseReceipt("JASMINE TEA  8.000\nTOTAL  8.000\nTUNAI 10.000\nKEMBALI 2.000", "IDR")
+        val r = receiptItems(lines)
+        assertEquals(listOf("JASMINE TEA"), r.items.map { it.text })
+        assertEquals(rp(8_000), r.totalMinor)
+        // Payment and change stay available as extras, never ticked by default.
+        assertEquals(listOf(LineRole.Payment, LineRole.Payment), r.extras.map { it.role })
+        assertEquals(emptySet(), r.defaultExtras())
+        assertEquals(setOf(rp(8_000), rp(10_000), rp(2_000)), amountsIn("JASMINE TEA  8.000\nTOTAL  8.000\nTUNAI 10.000\nKEMBALI 2.000", "IDR"))
+        assertEquals(listOf(rp(16_500)), receiptItems(parseReceipt("TOTAL 16.500", "IDR")).items.map { it.amountMinor })
+    }
+}
+
+class ReceiptExtrasTest {
+    @Test fun taxAndDiscountCountTowardTheTotal() {
+        val r = receiptItems(parseReceipt("NASI GORENG 30.000\nES TEH 5.000\nSUBTOTAL 35.000\nDISKON 5.000\nPPN 10% 3.000\nTOTAL 33.000\nTUNAI 50.000\nKEMBALI 17.000", "IDR"))
+        assertEquals(listOf("NASI GORENG", "ES TEH"), r.items.map { it.text })
+        assertEquals(listOf(LineRole.Discount, LineRole.Charge, LineRole.Payment, LineRole.Payment), r.extras.map { it.role })
+        assertEquals(-rp(5_000), r.extras[0].amountMinor)
+        // Items 35.000 − 5.000 + 3.000 = 33.000 = printed total, so tax and discount are ticked.
+        assertEquals(setOf(r.extras[0], r.extras[1]), r.defaultExtras())
+        val split = splitReceipt(r.items + r.extras[0] + r.extras[1])
+        assertEquals(rp(33_000), split.sumOf { it.second })
+        assertEquals(true, split.all { it.second > 0 })
+    }
+
+    @Test fun extrasNotTickedWhenTheyDoNotMatch() {
+        val r = receiptItems(parseReceipt("KOPI 20.000\nSERVICE 2.000\nTOTAL 25.000", "IDR"))
+        assertEquals(emptySet(), r.defaultExtras())
+        assertEquals(LineRole.Charge, r.extras.single().role)
+    }
+}

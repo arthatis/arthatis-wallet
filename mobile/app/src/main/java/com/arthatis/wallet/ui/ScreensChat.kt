@@ -162,6 +162,7 @@ fun ReceiptScreen(vm: AppViewModel) {
     val scan by vm.scan.collectAsState()
     var split by remember { mutableStateOf(false) }
     var engineUsed by remember { mutableStateOf<com.arthatis.wallet.ai.Engine?>(null) }
+    var printedTotal by remember { mutableStateOf<Long?>(null) }
     var categoryId by remember { mutableStateOf<String?>(null) }
     var walletId by remember { mutableStateOf(ledger.liveWallets.firstOrNull()?.id) }
     val file = remember { File(ctx.cacheDir, "receipt.jpg") }
@@ -175,8 +176,10 @@ fun ReceiptScreen(vm: AppViewModel) {
     LaunchedEffect(scan) {
         val done = scan as? AppViewModel.ScanState.Done ?: return@LaunchedEffect
         lines.clear()
-        val total = done.read.lines.lastOrNull { it.isTotal }
-        done.read.lines.forEach { lines += RLine(it, if (total != null) it == total else true) }
+        done.read.lines.forEach { lines += RLine(it, true) }
+        // Tax, service, discounts, payment and change: listed so they can be added; ticked only when they make the printed total.
+        done.read.extras.forEach { lines += RLine(it, it in done.read.preselected) }
+        printedTotal = done.read.totalMinor
         done.read.categoryId?.let { categoryId = it }
         engineUsed = done.read.engine
     }
@@ -192,10 +195,10 @@ fun ReceiptScreen(vm: AppViewModel) {
     val picked = lines.filter { it.selected }.mapNotNull { it.line.amountMinor }
     val cats = ledger.liveCategories.filter { !it.hidden && it.kind == EntryKind.expense }
     Column(Modifier.fillMaxSize()) {
-        TopBar(tr("Scan struk", "Scan receipt"), onBack = { vm.back() })
+        TopBar(tr("Foto struk", "Receipt photo"), onBack = { vm.back() })
         Page {
             Hint(tr("Foto diproses di perangkat dan tidak diunggah. Periksa angka yang bertanda.", "The photo is processed on this device and never uploaded. Check flagged numbers."))
-            AppButton(if (scanned) tr("Scan ulang", "Scan again") else tr("Ambil foto struk", "Take receipt photo"), ::capture, Modifier.fillMaxWidth(), style = if (scanned) BtnStyle.Tonal else BtnStyle.Filled, icon = Icons.Rounded.CameraAlt, loading = busy)
+            AppButton(if (scanned) tr("Foto ulang", "Retake photo") else tr("Ambil foto struk", "Take receipt photo"), ::capture, Modifier.fillMaxWidth(), style = if (scanned) BtnStyle.Tonal else BtnStyle.Filled, icon = Icons.Rounded.CameraAlt, loading = busy)
             if (busy) Row(verticalAlignment = Alignment.CenterVertically) {
                 Hint(if (scan == AppViewModel.ScanState.Reading) tr("Membaca teks di HP…", "Reading text on the phone…") else tr("Menyusun dengan AI… (maks. ±1 menit, lalu parser di HP)", "Structuring with AI… (up to ~1 min, then the on-device parser)"), Modifier.weight(1f))
                 AppButton(tr("Batal", "Cancel"), { vm.cancelScan() }, style = BtnStyle.Text, size = BtnSize.S)
@@ -205,18 +208,38 @@ fun ReceiptScreen(vm: AppViewModel) {
             }
             engineUsed?.let { Hint(tr("Dibaca oleh: ", "Read by: ") + when (it) { com.arthatis.wallet.ai.Engine.Nano -> "Gemini Nano"; com.arthatis.wallet.ai.Engine.Server -> tr("AI server", "Server AI"); com.arthatis.wallet.ai.Engine.Cloud -> tr("API pribadi", "Your API key"); com.arthatis.wallet.ai.Engine.Local -> tr("parser di HP", "on-device parser") }) }
             if (scanned && lines.isEmpty()) EmptyState(Pose.Worried, tr("Tidak ada angka terbaca", "No amounts were read"), tr("Coba foto lebih dekat dan terang.", "Try a closer, brighter photo."), ollieSize = 96.dp)
-            lines.forEachIndexed { i, rl ->
+            @Composable
+            fun lineCard(i: Int, rl: RLine) {
                 AppCard(padding = 8.dp) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(rl.selected, { lines[i] = rl.copy(selected = it) })
                         Column(Modifier.weight(1f)) {
                             Text(rl.line.text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-                            if (rl.line.isTotal) Hint(tr("Total", "Total"))
+                            when (rl.line.role) {
+                                com.arthatis.wallet.core.LineRole.Charge -> Hint(tr("Pajak/biaya · menambah total", "Tax/fee · adds to the total"))
+                                com.arthatis.wallet.core.LineRole.Discount -> Hint(tr("Diskon · mengurangi total", "Discount · lowers the total"))
+                                com.arthatis.wallet.core.LineRole.Payment -> Hint(tr("Pembayaran/kembalian · biasanya tidak dihitung", "Payment/change · usually not counted"))
+                                else -> if (rl.line.isTotal) Hint(tr("Total", "Total"))
+                            }
                             if (rl.line.uncertain) Text(tr("Periksa angka ini", "Check this number"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                         }
-                        Text(formatMinor(rl.line.amountMinor ?: 0, cur), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                        val amount = rl.line.amountMinor ?: 0
+                        Text(formatMinor(amount, cur, if (amount < 0) com.arthatis.wallet.core.Sign.Minus else com.arthatis.wallet.core.Sign.None), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
+            }
+            val itemIdx = lines.indices.filter { lines[it].line.role == com.arthatis.wallet.core.LineRole.Item }
+            val extraIdx = lines.indices.filter { lines[it].line.role != com.arthatis.wallet.core.LineRole.Item }
+            itemIdx.forEach { lineCard(it, lines[it]) }
+            if (extraIdx.isNotEmpty()) {
+                FieldLabel(tr("Pajak, diskon & lainnya", "Tax, discounts & more"))
+                Hint(tr("Centang yang ikut dibayar. Pajak/biaya menambah, diskon mengurangi.", "Tick what was part of the bill. Tax/fees add, discounts subtract."))
+                extraIdx.forEach { lineCard(it, lines[it]) }
+            }
+            printedTotal?.let { t ->
+                val sum = lines.filter { it.selected }.sumOf { it.line.amountMinor ?: 0 }
+                Hint(if (sum == t) tr("Total di struk ${formatMinor(t, cur)} · cocok dengan yang dicentang ✓", "Receipt total ${formatMinor(t, cur)} · matches the ticked lines ✓")
+                    else tr("Total di struk ${formatMinor(t, cur)} · yang dicentang ${formatMinor(sum, cur)}. Periksa lagi (pajak/diskon?).", "Receipt total ${formatMinor(t, cur)} · ticked ${formatMinor(sum, cur)}. Please check (tax/discount?)."))
             }
             if (lines.isNotEmpty()) {
                 FieldLabel(tr("Kategori", "Category"))
@@ -230,11 +253,12 @@ fun ReceiptScreen(vm: AppViewModel) {
                 AppButton(tr("Simpan ${formatMinor(total, cur)}", "Save ${formatMinor(total, cur)}"), {
                     val w = wallet ?: return@AppButton
                     val now = System.currentTimeMillis()
-                    if (split) lines.filter { it.selected && it.line.amountMinor != null }.forEach { rl ->
-                        vm.saveTx(Tx(newId(), w.id, null, categoryId, EntryKind.expense, rl.line.amountMinor!!, note = rl.line.text, occurredAt = now, updatedAt = 0))
+                    // Split: discounts come off the largest lines so no entry is negative; tax/fees get their own entry.
+                    if (split) com.arthatis.wallet.core.splitReceipt(lines.filter { it.selected }.map { it.line }).forEach { (text, minor) ->
+                        vm.saveTx(Tx(newId(), w.id, null, categoryId, EntryKind.expense, minor, note = text, occurredAt = now, updatedAt = 0))
                     } else vm.saveTx(Tx(newId(), w.id, null, categoryId, EntryKind.expense, total, note = tr0("Struk", "Receipt"), occurredAt = now, updatedAt = 0))
                     vm.back(); vm.say(vm.t("Tersimpan.", "Saved."))
-                }, Modifier.fillMaxWidth(), enabled = picked.isNotEmpty() && wallet != null && categoryId != null)
+                }, Modifier.fillMaxWidth(), enabled = picked.isNotEmpty() && picked.sum() > 0 && wallet != null && categoryId != null)
                 if (categoryId == null) Hint(tr("Pilih kategori dulu.", "Choose a category first."))
             }
         }

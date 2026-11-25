@@ -50,7 +50,8 @@ fun txSupporting(tx: Tx, ledger: Ledger): String {
         EntryKind.expense -> categoryName(ledger.category(tx.categoryId))
         EntryKind.transfer -> "${ledger.wallet(tx.walletId)?.name ?: "?"} → ${ledger.wallet(tx.toWalletId)?.name ?: "?"}"
     }
-    return if (tx.kind == EntryKind.transfer) "$kindLabel · ${shortDate(dayOf(tx.occurredAt))}"
+    val fee = tx.feeMinor?.takeIf { it > 0 }?.let { f -> " · " + tr("fee ", "fee ") + formatMinor(f, ledger.wallet(tx.toWalletId)?.currency ?: "IDR") } ?: ""
+    return if (tx.kind == EntryKind.transfer) "$kindLabel$fee · ${shortDate(dayOf(tx.occurredAt))}"
     else "$kindLabel · ${ledger.wallet(tx.walletId)?.name ?: "?"} · ${shortDate(dayOf(tx.occurredAt))}"
 }
 

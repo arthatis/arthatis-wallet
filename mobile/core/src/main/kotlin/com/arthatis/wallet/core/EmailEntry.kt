@@ -5,7 +5,7 @@ import java.math.BigDecimal
 /** What a bank / e-wallet notification email says, before the user confirms it. Amount in the currency's minor units. */
 data class EmailGuess(val kind: EntryKind, val amountMinor: Long, val currency: String, val counterpart: String?)
 
-/** Senders watched by default: Indonesian banks and e-wallets (matched against the From address, case-insensitive). */
+/** Example senders (Indonesian banks and e-wallets), shown as a hint; nothing is watched until the user lists senders. */
 val defaultEmailSenders = listOf(
     "bca.co.id", "klikbca.com", "bankmandiri.co.id", "livin", "bni.co.id", "bri.co.id", "jago.com", "btpn.com", "jenius",
     "cimbniaga.co.id", "ocbc.id", "permatabank", "danamon", "seabank", "blu", "gojek.com", "gopay", "ovo.id", "dana.id",

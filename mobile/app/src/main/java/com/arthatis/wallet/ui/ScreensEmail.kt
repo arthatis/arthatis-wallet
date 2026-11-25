@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,8 +32,11 @@ import com.arthatis.wallet.core.formatMinor
 import com.arthatis.wallet.email.EmailDraft
 import kotlinx.coroutines.launch
 
-private data class ImapPreset(val label: String, val host: String, val port: Int)
-private val presets = listOf(ImapPreset("Gmail", "imap.gmail.com", 993), ImapPreset("Outlook", "outlook.office365.com", 993), ImapPreset("Yahoo", "imap.mail.yahoo.com", 993))
+private data class ImapPreset(val key: String, val label: String, val host: String, val port: Int)
+private val presets = listOf(
+    ImapPreset("gmail", "Gmail", "imap.gmail.com", 993), ImapPreset("outlook", "Outlook", "outlook.office365.com", 993),
+    ImapPreset("yahoo", "Yahoo", "imap.mail.yahoo.com", 993), ImapPreset("icloud", "iCloud", "imap.mail.me.com", 993),
+)
 
 /** Settings → Transactions from email: IMAP account (app password), watched senders, on/off, check now. */
 @Composable
@@ -42,16 +48,22 @@ fun EmailSyncScreen(vm: AppViewModel) {
     var host by remember { mutableStateOf(prefs.emailHost) }
     var port by remember { mutableStateOf(prefs.emailPort.toString()) }
     var user by remember { mutableStateOf(prefs.emailUser) }
-    var password by remember { mutableStateOf("") }
+    var provider by remember { mutableStateOf(prefs.emailProvider) }
+    // The saved app password is filled in (masked); editing it replaces it.
+    var password by remember { mutableStateOf(prefs.emailPassword ?: "") }
+    var showPassword by remember { mutableStateOf(false) }
     val hasPassword = prefs.emailPassword != null
     var senders by remember { mutableStateOf(prefs.emailSenders.joinToString("\n")) }
+    val senderList = senders.lines().map { it.trim() }.filter { it.isNotEmpty() }
+    val preset = presets.firstOrNull { it.key == provider }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
     var confirmRemove by remember { mutableStateOf(false) }
     val ok = tr("Terhubung ✓", "Connected ✓")
     val saved = tr("Tersimpan.", "Saved.")
+    val noSenders = tr("Tersimpan, tapi belum aktif: isi minimal satu pengirim.", "Saved, but not on yet: add at least one sender.")
     val portInt = port.toIntOrNull() ?: 993
-    val canSave = user.isNotBlank() && host.isNotBlank() && (hasPassword || password.isNotBlank())
+    val canSave = user.isNotBlank() && host.isNotBlank() && password.isNotBlank()
 
     Column(Modifier.fillMaxSize()) {
         TopBar(tr("Transaksi dari email", "Transactions from email"), onBack = { vm.back() })
@@ -65,7 +77,10 @@ fun EmailSyncScreen(vm: AppViewModel) {
                 AppSwitch(enabled, { enabled = it })
             }
             FieldLabel(tr("Penyedia", "Provider"))
-            ChipRow { presets.forEach { p -> AppChip(p.label, host == p.host, { host = p.host; port = p.port.toString() }) } }
+            ChipRow {
+                presets.forEach { p -> AppChip(p.label, provider == p.key, { provider = p.key; host = p.host; port = p.port.toString() }) }
+                AppChip(tr("Custom", "Custom"), provider == "custom", { provider = "custom" })
+            }
             AppTextField(user, { user = it }, tr("Alamat email", "Email address"), keyboard = KeyboardType.Email)
             AppTextField(password, { password = it }, tr("App password", "App password"), keyboard = KeyboardType.Password,
                 supporting = if (hasPassword) tr("Tersimpan terenkripsi. Kosongkan untuk tetap memakai yang lama.", "Stored encrypted. Leave empty to keep it.")
@@ -82,13 +97,13 @@ fun EmailSyncScreen(vm: AppViewModel) {
                 AppButton(tr("Tes koneksi", "Test connection"), {
                     scope.launch {
                         testing = true
-                        val err = vm.testEmail(host.trim(), portInt, user.trim(), password.ifBlank { prefs.emailPassword ?: "" })
+                        val err = vm.testEmail(host.trim(), portInt, user.trim(), password)
                         testResult = err ?: ok; testing = false
                     }
                 }, Modifier.weight(1f), style = BtnStyle.Outlined, size = BtnSize.S, loading = testing, enabled = canSave)
                 AppButton(tr("Simpan", "Save"), {
-                    vm.saveEmailSettings(enabled, host.trim(), portInt, user.trim(), password.ifBlank { null }, senders.lines())
-                    password = ""; vm.say(saved)
+                    vm.saveEmailSettings(enabled && senderList.isNotEmpty(), provider, host.trim(), portInt, user.trim(), password, senderList)
+                    if (enabled && senderList.isEmpty()) vm.say(noSenders) else vm.say(saved)
                 }, Modifier.weight(1f), size = BtnSize.S, enabled = canSave)
             }
             if (hasPassword) {

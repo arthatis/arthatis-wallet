@@ -4,11 +4,14 @@ export type EntryKind = "expense" | "income" | "transfer";
 export type Frequency = "daily" | "weekly" | "monthly" | "yearly";
 
 interface Syncable { id: string; updatedAt: number; deletedAt: number | null }
-export interface Wallet extends Syncable { name: string; kind: WalletKind; currency: string; openingMinor: number; position: number; icon?: string | null; color?: string | null }
+/** creditLimitMinor/dueDay: credit cards only. The limit is information, never a balance. */
+export interface Wallet extends Syncable { name: string; kind: WalletKind; currency: string; openingMinor: number; position: number; icon?: string | null; color?: string | null; creditLimitMinor?: number | null; dueDay?: number | null }
 export interface Category extends Syncable { key: string | null; name: string; kind: EntryKind; color: string; hidden: boolean; position: number }
 export interface Tx extends Syncable {
   walletId: string; toWalletId: string | null; categoryId: string | null; kind: EntryKind; amountMinor: number;
   toAmountMinor: number | null; rate: string | null; note: string; occurredAt: number; recurringId: string | null;
+  /** Transfers: fee taken from what the recipient gets (destination currency); toAmountMinor is already net of it. */
+  feeMinor?: number | null;
 }
 export interface Recurring extends Syncable {
   name: string; walletId: string; categoryId: string; kind: EntryKind; amountMinor: number; frequency: Frequency;
@@ -208,14 +211,31 @@ export function spendByCategory(l: Ledger, currency: string, rates: Rates, from:
 export const newId = () => crypto.randomUUID().replaceAll("-", "").slice(0, 20);
 export const dayStart = (ms: number) => Math.floor(ms / 86_400_000) * 86_400_000;
 
-export function buildTransfer(from: Wallet, to: Wallet, minor: number, rates: Rates, manualRate: number | null, at: number): Tx | null {
-  if (from.id === to.id || minor <= 0) return null;
-  const base = { id: newId(), walletId: from.id, toWalletId: to.id, categoryId: null, kind: "transfer" as const, amountMinor: minor, note: "", occurredAt: at, recurringId: null, updatedAt: 0, deletedAt: null };
-  if (from.currency === to.currency) return { ...base, toAmountMinor: minor, rate: null };
-  const rate = manualRate ?? rates.effective(from.currency, to.currency);
-  if (!rate) return null;
-  const converted = new Rates({}, { [pairKey(from.currency, to.currency)]: rate }).convert(minor, from.currency, to.currency);
-  return converted === null ? null : { ...base, toAmountMinor: converted, rate: String(rate) };
+/**
+ * Same as the phone: the destination amount comes from the rate (manual wins) or, when only both amounts are known,
+ * from [receivedMinor] (gross, destination currency; the rate is derived). An optional fee is taken from the recipient.
+ */
+export function buildTransfer(from: Wallet, to: Wallet, minor: number, rates: Rates, manualRate: number | null, at: number,
+  opts: { receivedMinor?: number | null; feeMinor?: number; categoryId?: string | null } = {}): Tx | null {
+  const fee = opts.feeMinor ?? 0;
+  if (from.id === to.id || minor <= 0 || fee < 0) return null;
+  const base = { id: newId(), walletId: from.id, toWalletId: to.id, categoryId: opts.categoryId ?? null, kind: "transfer" as const, amountMinor: minor, note: "", occurredAt: at, recurringId: null, updatedAt: 0, deletedAt: null, feeMinor: fee > 0 ? fee : null };
+  if (from.currency === to.currency) return minor - fee < 0 ? null : { ...base, toAmountMinor: minor - fee, rate: null };
+  let gross: number | null; let rate: number | null;
+  if (opts.receivedMinor) { gross = opts.receivedMinor; rate = rateFromAmounts(minor, from.currency, gross, to.currency); }
+  else {
+    rate = manualRate ?? rates.effective(from.currency, to.currency);
+    if (!rate) return null;
+    gross = new Rates({}, { [pairKey(from.currency, to.currency)]: rate }).convert(minor, from.currency, to.currency);
+  }
+  if (gross === null || gross - fee < 0) return null;
+  return { ...base, toAmountMinor: gross - fee, rate: String(Number(rate.toPrecision(10))) };
+}
+
+/** The pair rate implied by sending [sent] and receiving [received]: quote per base, as pairKey orients it (USD/IDR = IDR per USD). */
+export function rateFromAmounts(sent: number, fromCur: string, received: number, toCur: string): number {
+  const s = toMajor(sent, fromCur), r = toMajor(received, toCur);
+  return pairKey(fromCur, toCur).startsWith(fromCur + "/") ? r / s : s / r;
 }
 
 // --- Archive (.arthatis JSON) and CSV: identical shapes to the phone's `ArchiveData` ------------

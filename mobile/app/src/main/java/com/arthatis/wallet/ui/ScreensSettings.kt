@@ -242,8 +242,8 @@ fun CategoriesScreen(vm: AppViewModel) {
         TopBar(tr("Kategori", "Categories"), onBack = { vm.back() }, actions = { AppIconButton(Icons.Rounded.Category, { adding = true }, description = tr("Tambah", "Add")) })
         Page {
             Body(tr("Kategori bawaan tidak bisa dihapus, hanya disembunyikan.", "Default categories can't be deleted, only hidden."))
-            ledger.liveCategories.filter { it.kind != EntryKind.transfer }.forEach { c ->
-                ListItem(categoryName(c), supporting = if (c.kind == EntryKind.income) tr("Pemasukan", "Income") else tr("Pengeluaran", "Expense"), leading = categoryIcon(c.key), trailing = {
+            ledger.liveCategories.forEach { c ->
+                ListItem(categoryName(c), supporting = when (c.kind) { EntryKind.income -> tr("Pemasukan", "Income"); EntryKind.expense -> tr("Pengeluaran", "Expense"); EntryKind.transfer -> tr("Transfer", "Transfer") }, leading = categoryIcon(c.key), trailing = {
                     if (c.key != null) AppSwitch(!c.hidden, { vm.viewModelScope_launch { vm.repo.saveCategory(c.copy(hidden = !it)) } })
                     else AppButton(tr("Hapus", "Delete"), { vm.viewModelScope_launch { vm.repo.saveCategory(c.copy(deletedAt = vm.repo.now())) } }, style = BtnStyle.Text, size = BtnSize.XS)
                 })
@@ -255,7 +255,7 @@ fun CategoriesScreen(vm: AppViewModel) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 AppTextField(name, { name = it }, tr("Nama", "Name"))
-                ChipRow { AppChip(tr("Pengeluaran", "Expense"), kind == EntryKind.expense, { kind = EntryKind.expense }); AppChip(tr("Pemasukan", "Income"), kind == EntryKind.income, { kind = EntryKind.income }) }
+                ChipRow { AppChip(tr("Pengeluaran", "Expense"), kind == EntryKind.expense, { kind = EntryKind.expense }); AppChip(tr("Pemasukan", "Income"), kind == EntryKind.income, { kind = EntryKind.income }); AppChip(tr("Transfer", "Transfer"), kind == EntryKind.transfer, { kind = EntryKind.transfer }) }
             }
         },
         confirmButton = { androidx.compose.material3.TextButton({ if (name.isNotBlank()) { vm.viewModelScope_launch { vm.repo.saveCategory(Category(newId(), null, name.trim(), kind, "#717970", false, 100 + ledger.categories.size, 0)) }; name = ""; adding = false } }) { Text(tr("Simpan", "Save")) } },

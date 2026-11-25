@@ -140,9 +140,13 @@ class Prefs(context: Context) : SecretStore {
     var emailPassword: String?
         get() = secret("emailPassword")?.let { String(it) }
         set(v) = putSecret("emailPassword", v?.toByteArray())
-    /** Watched sender fragments, one per line. */
+    /** IMAP provider preset key (gmail, outlook, yahoo, icloud) or `custom`. */
+    var emailProvider: String
+        get() = sp.getString("email.provider", "gmail")!!
+        set(v) = sp.edit().putString("email.provider", v).apply()
+    /** Watched sender fragments. Empty by default: with no sender, nothing is read. */
     var emailSenders: List<String>
-        get() = sp.getString("email.senders", null)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: com.arthatis.wallet.core.defaultEmailSenders
+        get() = sp.getString("email.senders", null)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
         set(v) = sp.edit().putString("email.senders", v.joinToString("\n")).apply()
     /** IMAP UIDVALIDITY + last UID seen, so each email is read once. */
     var emailUidValidity: Long

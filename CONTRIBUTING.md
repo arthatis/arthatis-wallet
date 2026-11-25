@@ -1,11 +1,11 @@
-# Berkontribusi
+# Contributing
 
 Repo: https://github.com/arthatis/arthatis-wallet
 
-1. Fork dan clone repo ini.
-2. Untuk perubahan besar (alur, protokol, format data), buka issue dulu. Keputusan produk dan spesifikasi protokol dikelola maintainer.
-3. Jalankan tes sebelum PR: `npm test` di `server/` dan `web/`, `./gradlew :core:test :app:testDebugUnitTest` di `mobile/`.
-4. Kirim PR kecil dan terfokus. Perubahan yang mengubah arah produk didiskusikan dulu di issue.
-5. Jangan menaruh rahasia (token, kunci, kredensial SMTP) atau data pengguna di PR.
+1. Fork and clone this repo.
+2. For big changes (flows, protocol, data format), open an issue first. Product decisions and the protocol spec are kept by the maintainers.
+3. Run the tests before a PR: `npm test` in `server/` and `web/`, `./gradlew :core:test :app:testDebugUnitTest` in `mobile/`.
+4. Send small, focused PRs. Changes that alter the product's direction are discussed in an issue first.
+5. Never put secrets (tokens, keys, SMTP credentials) or user data in a PR.
 
-Kontribusi dilisensikan di bawah AGPL-3.0.
+Contributions are licensed under the AGPL-3.0.

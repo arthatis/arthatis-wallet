@@ -78,9 +78,18 @@ fun periodFlow(
     return Flow(income, expense)
 }
 
-/** Wallets by balance in [currency], highest first. A wallet whose rate is missing is ranked by its own amount. */
-fun walletsByBalance(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): List<Wallet> =
-    wallets.sortedByDescending { w -> walletBalance(w, txs).let { rates.convert(it, w.currency, currency) ?: it } }
+/**
+ * Cash and investment wallets by balance in [currency], highest first, then credit cards (a card's limit is not the
+ * user's money, so a card never ranks as a top asset). A wallet whose rate is missing is ranked by its own amount.
+ */
+fun walletsByBalance(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates): List<Wallet> {
+    val (cards, assets) = wallets.partition { it.kind.isCredit }
+    return assets.sortedByDescending { w -> walletBalance(w, txs).let { rates.convert(it, w.currency, currency) ?: it } } + cards
+}
+
+/** Balance of every wallet at [at] (millis, exclusive): opening balances + transactions before that moment, in [currency]. */
+fun netWorthAt(wallets: List<Wallet>, txs: List<Tx>, currency: String, rates: Rates, at: Long): Long? =
+    totalBalance(wallets, txs.filter { it.occurredAt < at }, currency, rates)
 
 fun monthBounds(day: LocalDate, zone: ZoneId = ZoneOffset.UTC): Pair<Long, Long> {
     val start = day.withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli()
@@ -92,7 +101,12 @@ fun dayOf(millis: Long, zone: ZoneId = ZoneOffset.UTC): LocalDate = Instant.ofEp
 
 fun epochMillis(day: LocalDate, zone: ZoneId = ZoneOffset.UTC): Long = day.atStartOfDay(zone).toInstant().toEpochMilli()
 
-/** Resolves a transfer's destination amount from the effective rate, honoring a manual rate. */
+/**
+ * Builds a transfer. The destination amount comes from the effective rate (a manual rate wins), or, when the user only
+ * knows both amounts, from [receivedMinor] (the gross amount received, in the destination currency; the rate is then
+ * derived from it). An optional [feeMinor] (destination currency) is taken from what the recipient gets.
+ * Null when a rate is missing, the wallets are the same, or the fee is larger than the amount received.
+ */
 fun buildTransfer(
     id: String,
     from: Wallet,
@@ -103,16 +117,41 @@ fun buildTransfer(
     occurredAt: Long,
     now: Long,
     note: String = "",
+    receivedMinor: Long? = null,
+    feeMinor: Long = 0,
+    categoryId: String? = null,
 ): Tx? {
-    if (from.id == to.id || amountMinor <= 0) return null
+    if (from.id == to.id || amountMinor <= 0 || feeMinor < 0) return null
+    val fee = feeMinor.takeIf { it > 0 }
     if (from.currency == to.currency) {
-        return Tx(id, from.id, to.id, null, EntryKind.transfer, amountMinor, amountMinor, null, note, occurredAt, null, now)
+        val net = amountMinor - feeMinor
+        if (net < 0) return null
+        return Tx(id, from.id, to.id, categoryId, EntryKind.transfer, amountMinor, net, null, note, occurredAt, null, now, feeMinor = fee)
     }
     val pair = pairFor(from.currency, to.currency)
-    val effective = manualRate ?: rates.effective(pair) ?: return null
-    val manualTable = Rates(emptyMap(), mapOf(pair.key to effective))
-    val received = manualTable.convert(amountMinor, from.currency, to.currency) ?: return null
-    return Tx(id, from.id, to.id, null, EntryKind.transfer, amountMinor, received, effective.toPlainString(), note, occurredAt, null, now)
+    val gross: Long
+    val effective: java.math.BigDecimal
+    if (receivedMinor != null) {
+        if (receivedMinor <= 0) return null
+        gross = receivedMinor
+        effective = rateFromAmounts(amountMinor, from.currency, receivedMinor, to.currency)
+    } else {
+        effective = manualRate ?: rates.effective(pair) ?: return null
+        gross = Rates(emptyMap(), mapOf(pair.key to effective)).convert(amountMinor, from.currency, to.currency) ?: return null
+    }
+    val net = gross - feeMinor
+    if (net < 0) return null
+    return Tx(id, from.id, to.id, categoryId, EntryKind.transfer, amountMinor, net, effective.toPlainString(), note, occurredAt, null, now, feeMinor = fee)
+}
+
+/** The pair rate (as [pairFor] orients it) implied by sending [sentMinor] and receiving [receivedMinor]. */
+fun rateFromAmounts(sentMinor: Long, fromCurrency: String, receivedMinor: Long, toCurrency: String): java.math.BigDecimal {
+    val sent = toMajor(sentMinor, fromCurrency)
+    val received = toMajor(receivedMinor, toCurrency)
+    val pair = pairFor(fromCurrency, toCurrency)
+    val mc = java.math.MathContext(10, java.math.RoundingMode.HALF_UP)
+    // pair.base is what one unit is quoted in: USD/IDR = IDR per USD.
+    return (if (pair.base == fromCurrency) received.divide(sent, mc) else sent.divide(received, mc)).stripTrailingZeros()
 }
 
 data class BudgetLine(val categoryId: String, val budgetMinor: Long, val spentMinor: Long) {

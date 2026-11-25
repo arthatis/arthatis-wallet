@@ -39,12 +39,18 @@ import java.time.format.DateTimeFormatter
 
 /** Every text the PDF needs, resolved in Compose (language, category names) so the writer itself is plain code. */
 private class ReportText(
-    val title: String, val period: String, val generated: String, val summary: String, val netWorth: String,
+    val title: String, val period: String, val generated: String, val summary: String, val opening: String, val netWorth: String,
     val income: String, val expense: String, val net: String, val byExpense: String, val byIncome: String,
-    val wallets: String, val walletHead: List<String>, val txHead: List<String>, val transactions: String,
+    val wallets: String, val walletHead: List<String>, val txHead: List<String>, val transactions: String, val kindName: (EntryKind) -> String,
     val none: String, val page: String, val footer: String,
     val categoryName: (String?) -> String, val walletName: (String?) -> String, val date: (Long) -> String,
 )
+
+@Composable
+private fun kindLabels(): (EntryKind) -> String {
+    val e = tr("Pengeluaran", "Expense"); val i = tr("Pemasukan", "Income"); val t = tr("Transfer", "Transfer")
+    return { k -> when (k) { EntryKind.expense -> e; EntryKind.income -> i; EntryKind.transfer -> t } }
+}
 
 /** Financial report for a date range (default: last 30 days up to today), saved as a PDF made on the phone. */
 @Composable
@@ -77,13 +83,15 @@ fun ReportScreen(vm: AppViewModel) {
         period = "${fmt.format(from)} – ${fmt.format(to)}",
         generated = tr("Dibuat ", "Generated ") + fmt.format(today) + " · Arthatis Wallet",
         summary = tr("Ringkasan", "Summary"),
-        netWorth = tr("Total saldo (kas + investasi − utang kartu) per akhir periode", "Total balance (cash + investments − card debt) at period end"),
+        opening = tr("Saldo awal periode (bukan pemasukan)", "Opening balance (not income)"),
+        netWorth = tr("Saldo akhir periode (kas + investasi − utang kartu)", "Closing balance (cash + investments − card debt)"),
         income = tr("Pemasukan", "Income"), expense = tr("Pengeluaran", "Expenses"), net = tr("Selisih", "Net"),
         byExpense = tr("Pengeluaran per kategori", "Expenses by category"), byIncome = tr("Pemasukan per kategori", "Income by category"),
         wallets = tr("Per dompet", "By wallet"),
-        walletHead = listOf(tr("Dompet", "Wallet"), tr("Masuk", "In"), tr("Keluar", "Out"), tr("Saldo akhir", "Closing")),
+        walletHead = listOf(tr("Dompet", "Wallet"), tr("Awal", "Opening"), tr("Masuk", "In"), tr("Keluar", "Out"), tr("Akhir", "Closing")),
         txHead = listOf(tr("Tanggal", "Date"), tr("Keterangan", "Description"), tr("Dompet", "Wallet"), tr("Nominal", "Amount")),
-        transactions = tr("Daftar transaksi", "Transactions"), none = tr("Tidak ada data.", "No data."),
+        transactions = tr("Transaksi per kategori", "Transactions by category"), none = tr("Tidak ada data.", "No data."),
+        kindName = kindLabels(),
         page = tr("Halaman", "Page"),
         footer = tr("Dibuat di perangkat. Nominal dalam mata uang masing-masing dompet kecuali disebut lain.", "Made on the device. Amounts are in each wallet's currency unless stated."),
         categoryName = { id -> id?.let { catNames[it] } ?: uncategorised },
@@ -104,8 +112,9 @@ fun ReportScreen(vm: AppViewModel) {
             report?.let { r ->
                 AppCard(padding = 20.dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Hint(tr("Total saldo per akhir periode", "Total balance at period end"))
+                        Hint(tr("Saldo akhir periode", "Closing balance"))
                         FitAmount(formatMinor(r.netWorthMinor, currency), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
+                        Hint(tr("Saldo awal ${formatMinor(r.openingMinor, currency)} (bukan pemasukan)", "Opening ${formatMinor(r.openingMinor, currency)} (not income)"))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -164,10 +173,11 @@ private fun writeReportPdf(r: Report, t: ReportText, ledger: com.arthatis.wallet
     page.canvas.drawText(t.generated, margin, y, muted); y += 8f
 
     section(t.summary)
-    row(t.netWorth, formatMinor(r.netWorthMinor, r.currency), bold)
+    row(t.opening, formatMinor(r.openingMinor, r.currency))
     row(t.income, formatMinor(r.incomeMinor, r.currency, Sign.Plus))
     row(t.expense, formatMinor(r.expenseMinor, r.currency, Sign.Minus))
-    row(t.net, formatMinor(r.netMinor, r.currency, if (r.netMinor >= 0) Sign.Plus else Sign.Minus), bold)
+    row(t.net, formatMinor(r.netMinor, r.currency, if (r.netMinor >= 0) Sign.Plus else Sign.Minus))
+    row(t.netWorth, formatMinor(r.netWorthMinor, r.currency), bold)
 
     section("${t.byExpense} (${r.currency})")
     if (r.expenses.isEmpty()) row(t.none, "")
@@ -180,36 +190,43 @@ private fun writeReportPdf(r: Report, t: ReportText, ledger: com.arthatis.wallet
     r.incomes.forEach { c -> row("${t.categoryName(c.categoryId)} (${c.count})", formatMinor(c.amountMinor, r.currency)) }
 
     section(t.wallets)
-    val wx = floatArrayOf(margin, 300f, 410f, right)
+    val wx = floatArrayOf(margin, 250f, 345f, 440f, right)
     ensure(16f)
-    page.canvas.drawText(t.walletHead[0], wx[0], y, bold); right(t.walletHead[1], wx[1], bold); right(t.walletHead[2], wx[2], bold); right(t.walletHead[3], wx[3], bold); y += 15f
+    page.canvas.drawText(t.walletHead[0], wx[0], y, bold); (1..4).forEach { right(t.walletHead[it], wx[it], bold) }; y += 15f
     r.wallets.forEach { w ->
         ensure(16f)
-        page.canvas.drawText(fit(w.wallet.name, body, 150f), wx[0], y, body)
-        right(formatMinor(w.inMinor, w.wallet.currency), wx[1], body)
-        right(formatMinor(w.outMinor, w.wallet.currency), wx[2], body)
-        right(formatMinor(w.closingMinor, w.wallet.currency), wx[3], body)
+        page.canvas.drawText(fit(w.wallet.name, body, 110f), wx[0], y, body)
+        right(formatMinor(w.openingMinor, w.wallet.currency), wx[1], body)
+        right(formatMinor(w.inMinor, w.wallet.currency), wx[2], body)
+        right(formatMinor(w.outMinor, w.wallet.currency), wx[3], body)
+        right(formatMinor(w.closingMinor, w.wallet.currency), wx[4], body)
         y += 15f
     }
 
     section("${t.transactions} (${r.transactions.size})")
     val tx = floatArrayOf(margin, 110f, 400f, right)
-    fun txHeader() { page.canvas.drawText(t.txHead[0], tx[0], y, bold); page.canvas.drawText(t.txHead[1], tx[1], y, bold); page.canvas.drawText(t.txHead[2], tx[2], y, bold); right(t.txHead[3], tx[3], bold); y += 15f }
-    ensure(16f); txHeader()
+    fun txHeader() { page.canvas.drawText(t.txHead[0], tx[0], y, muted); page.canvas.drawText(t.txHead[1], tx[1], y, muted); page.canvas.drawText(t.txHead[2], tx[2], y, muted); right(t.txHead[3], tx[3], muted); y += 14f }
     if (r.transactions.isEmpty()) row(t.none, "")
-    r.transactions.forEach { item ->
-        if (y + 16f > height - 48f) { newPage(); txHeader() }
-        val wallet = ledger.wallet(item.walletId)
-        val description = when (item.kind) {
-            EntryKind.transfer -> "${item.note.ifBlank { "Transfer" }} → ${t.walletName(item.toWalletId)}"
-            else -> listOf(t.categoryName(item.categoryId), item.note).filter { it.isNotBlank() }.distinct().joinToString(" · ")
+    r.groups.forEach { g ->
+        // Group header: category, kind, count and subtotal in the report currency.
+        ensure(48f); y += 6f
+        page.canvas.drawText(fit("${t.categoryName(g.categoryId)} · ${t.kindName(g.kind)} (${g.transactions.size})", bold, 360f), margin, y, bold)
+        right(formatMinor(g.totalMinor, r.currency), right, bold); y += 15f
+        txHeader()
+        g.transactions.forEach { item ->
+            if (y + 16f > height - 48f) { newPage(); txHeader() }
+            val wallet = ledger.wallet(item.walletId)
+            val description = when (item.kind) {
+                EntryKind.transfer -> "${item.note.ifBlank { "Transfer" }} → ${t.walletName(item.toWalletId)}" + (item.feeMinor?.takeIf { it > 0 }?.let { " (fee ${formatMinor(it, ledger.wallet(item.toWalletId)?.currency ?: r.currency)})" } ?: "")
+                else -> item.note.ifBlank { t.categoryName(item.categoryId) }
+            }
+            val sign = when (item.kind) { EntryKind.income -> Sign.Plus; EntryKind.expense -> Sign.Minus; EntryKind.transfer -> Sign.None }
+            page.canvas.drawText(t.date(item.occurredAt), tx[0], y, body)
+            page.canvas.drawText(fit(description, body, 280f), tx[1], y, body)
+            page.canvas.drawText(fit(wallet?.name ?: "?", body, 80f), tx[2], y, body)
+            right(formatMinor(item.amountMinor, wallet?.currency ?: r.currency, sign), tx[3], body)
+            y += 15f
         }
-        val sign = when (item.kind) { EntryKind.income -> Sign.Plus; EntryKind.expense -> Sign.Minus; EntryKind.transfer -> Sign.None }
-        page.canvas.drawText(t.date(item.occurredAt), tx[0], y, body)
-        page.canvas.drawText(fit(description, body, 280f), tx[1], y, body)
-        page.canvas.drawText(fit(wallet?.name ?: "?", body, 80f), tx[2], y, body)
-        right(formatMinor(item.amountMinor, wallet?.currency ?: r.currency, sign), tx[3], body)
-        y += 15f
     }
     ensure(30f); y += 12f
     page.canvas.drawText(t.footer, margin, y, muted)

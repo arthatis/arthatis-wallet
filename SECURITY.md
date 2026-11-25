@@ -1,7 +1,7 @@
-# Keamanan
+# Security
 
-Arthatis Wallet memakai E2EE: server hanya menyimpan ciphertext. Kriptografinya belum diaudit pihak ketiga.
+Arthatis Wallet is end-to-end encrypted: the server only stores ciphertext. The cryptography has not been audited by a third party yet.
 
-Laporkan celah secara privat lewat **GitHub Security Advisories** di https://github.com/arthatis/arthatis-wallet/security/advisories. Jangan membuka issue publik untuk celah yang belum diperbaiki.
+Report vulnerabilities privately through **GitHub Security Advisories** at https://github.com/arthatis/arthatis-wallet/security/advisories. Please don't open a public issue for an unfixed vulnerability.
 
-Kunci, token, dan kredensial tidak boleh masuk repo; server membacanya dari environment.
+Keys, tokens and credentials never go into the repo; the server reads them from its environment.

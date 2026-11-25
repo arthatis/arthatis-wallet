@@ -82,9 +82,9 @@ fun WelcomeScreen(vm: AppViewModel) {
     Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Ollie(Pose.Wave, 160.dp)
         Text(tr("Dompet yang tetap jalan tanpa internet.", "A wallet that works without internet."), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
-        Body(tr("Catat, scan struk, dan tanya AI tanpa akun. Data tinggal di perangkatmu.", "Log, scan receipts and ask AI without an account. Your data stays on your device."))
+        Body(tr("Catat, foto struk, dan tanya AI tanpa akun. Data tinggal di perangkatmu.", "Log, photograph receipts and ask AI without an account. Your data stays on your device."))
         Spacer(Modifier.height(8.dp))
-        Benefit(Icons.Rounded.Bolt, tr("Catat cepat", "Log fast"), tr("Keypad, suara, atau scan struk — tanpa internet.", "Keypad, voice or receipt scan — no internet."))
+        Benefit(Icons.Rounded.Bolt, tr("Catat cepat", "Log fast"), tr("Keypad, suara, atau foto struk — tanpa internet.", "Keypad, voice or receipt photo — no internet."))
         Benefit(Icons.Rounded.Lock, tr("Privat by default", "Private by default"), tr("E2EE. Server tidak bisa membaca datamu.", "E2EE. The server cannot read your data."))
         Benefit(Icons.Rounded.Groups, tr("Wallet bareng", "Shared wallets"), tr("Nabung dan investasi bersama, transparan.", "Save and invest together, transparently."))
         Spacer(Modifier.weight(1f, fill = false).height(16.dp))

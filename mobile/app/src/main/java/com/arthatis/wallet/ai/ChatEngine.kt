@@ -245,35 +245,59 @@ class ChatEngine(private val prefs: Prefs, private val serverHttp: Http) {
         const val HISTORY_TURNS = 10
     }
 
-    data class ReceiptRead(val lines: List<ReceiptLine>, val categoryId: String?, val engine: Engine)
+    /**
+     * [lines] = products; [extras] = tax/service/fees (add), discounts (negative), payment and change (don't count);
+     * [preselected] = extras ticked by default; [totalMinor] = the printed total when it really is on the receipt.
+     */
+    data class ReceiptRead(
+        val lines: List<ReceiptLine>, val categoryId: String?, val engine: Engine, val totalMinor: Long? = null,
+        val extras: List<ReceiptLine> = emptyList(), val preselected: Set<ReceiptLine> = emptySet(),
+    )
 
     /**
      * Structures OCR text (read on the phone by ML Kit; the photo never leaves it) with the same engine chain as chat.
-     * If no engine answers or the answer is unusable, falls back to the plain on-device parser.
+     * Products become lines; tax, service, discounts, payment and change become optional extras. Every amount must
+     * appear in the OCR text, else it is flagged; a total that is not on the receipt is dropped. Falls back to the
+     * on-device parser.
      */
     suspend fun readReceipt(ocrText: String, ledger: Ledger, currency: String): ReceiptRead {
         val cats = ledger.liveCategories.filter { !it.hidden && it.kind == EntryKind.expense }
-        val system = "You read shop receipts. Reply ONLY with JSON: {\"items\":[{\"name\":\"...\",\"amount\":<number in $currency>}],\"total\":<number or null>," +
-            "\"category\":\"<best of: ${cats.joinToString { it.key ?: it.name }}>\"}. Use only numbers present in the text; skip lines you cannot read."
+        val onReceipt = com.arthatis.wallet.core.amountsIn(ocrText, currency)
+        val system = "You read shop receipts from OCR text. Reply ONLY with JSON: {\"items\":[{\"name\":\"...\",\"amount\":<number in $currency>}]," +
+            "\"extras\":[{\"name\":\"...\",\"amount\":<number>,\"type\":\"charge|discount|payment\"}],\"total\":<number or null>," +
+            "\"category\":\"<best of: ${cats.joinToString { it.key ?: it.name }}>\"}. items = purchased products ONLY (line amount = qty × price). " +
+            "extras = every other money line except subtotal and total: tax/PPN/service/fees/delivery/rounding = charge, discount/voucher = discount " +
+            "(positive number), cash/card/QRIS/e-wallet paid and change = payment. Fix obvious OCR typos in product names (e.g. 'Sasmine Tea' → " +
+            "'Jasmine Tea'). Copy amounts exactly as printed; never compute or invent numbers; total = the printed total or null."
         val answered = ask(system, ocrText)?.let { (text, engine) -> jsonObjectOf(text)?.let { it to engine } }
         if (answered != null) {
             val (o, engine) = answered
-            val items = (o["items"] as? JsonArray)?.mapNotNull { el ->
+            fun lines(key: String, role: (JsonObject) -> com.arthatis.wallet.core.LineRole) = (o[key] as? JsonArray)?.mapNotNull { el ->
                 val item = el as? JsonObject ?: return@mapNotNull null
-                val minor = item.num("amount")?.let { runCatching { toMinor(it, currency) }.getOrNull() }?.takeIf { it > 0 } ?: return@mapNotNull null
-                ReceiptLine(item.str("name") ?: "—", minor, isTotal = false, uncertain = false)
+                val minor = item.num("amount")?.abs()?.let { runCatching { toMinor(it, currency) }.getOrNull() }?.takeIf { it > 0 } ?: return@mapNotNull null
+                ReceiptLine(item.str("name") ?: "—", minor, isTotal = false, uncertain = minor !in onReceipt, role = role(item))
             }.orEmpty()
-            val total = o.num("total")?.let { runCatching { toMinor(it, currency) }.getOrNull() }?.takeIf { it > 0 }
-            if (items.isNotEmpty() || total != null) {
+            val items = lines("items") { com.arthatis.wallet.core.LineRole.Item }
+            val extras = lines("extras") { e ->
+                when (e.str("type")?.lowercase()) {
+                    "discount" -> com.arthatis.wallet.core.LineRole.Discount
+                    "payment" -> com.arthatis.wallet.core.LineRole.Payment
+                    else -> com.arthatis.wallet.core.LineRole.Charge
+                }
+            }
+            val total = o.num("total")?.let { runCatching { toMinor(it, currency) }.getOrNull() }?.takeIf { it > 0 && it in onReceipt }
+            // Products the model mislabelled (e.g. "PPN" listed as an item) are moved by their words; roles then sign discounts.
+            val sorted = com.arthatis.wallet.core.receiptItems(items + extras)
+            val products = sorted.items.let { list -> if (total != null && list.size > 1) list.filterNot { it.amountMinor == total && it.text.contains("total", true) } else list }
+            if (products.isNotEmpty() && products.none { it.isTotal }) {
                 lastEngine = engine
                 val key = o.str("category")
-                return ReceiptRead(
-                    items + listOfNotNull(total?.let { ReceiptLine("Total", it, isTotal = true, uncertain = false) }),
-                    cats.firstOrNull { it.key == key || it.name.equals(key, true) }?.id, engine,
-                )
+                val read = com.arthatis.wallet.core.ReceiptItems(products, sorted.extras, total)
+                return ReceiptRead(products, cats.firstOrNull { it.key == key || it.name.equals(key, true) }?.id, engine, total, read.extras, read.defaultExtras())
             }
         }
-        return ReceiptRead(parseReceipt(ocrText, currency), null, Engine.Local)
+        val local = com.arthatis.wallet.core.receiptItems(parseReceipt(ocrText, currency))
+        return ReceiptRead(local.items, null, Engine.Local, local.totalMinor, local.extras, local.defaultExtras())
     }
 
     /**

@@ -148,12 +148,16 @@ fun AppTextField(
     value: String, onChange: (String) -> Unit, label: String, modifier: Modifier = Modifier,
     supporting: String? = null, keyboard: KeyboardType = KeyboardType.Text, error: Boolean = false,
     singleLine: Boolean = true, leading: (@Composable () -> Unit)? = null, trailing: (@Composable () -> Unit)? = null,
+    visualTransformation: androidx.compose.ui.text.input.VisualTransformation = androidx.compose.ui.text.input.VisualTransformation.None,
+    placeholder: String? = null, enabled: Boolean = true, minLines: Int = 1,
 ) {
     OutlinedTextField(
         value = value, onValueChange = onChange, label = { Text(label) }, modifier = modifier.fillMaxWidth(),
-        supportingText = supporting?.let { { Text(it) } }, isError = error, singleLine = singleLine,
+        supportingText = supporting?.let { { Text(it) } }, isError = error, singleLine = singleLine, enabled = enabled, minLines = minLines,
+        placeholder = placeholder?.let { { Text(it, color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) } },
         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = keyboard),
         shape = RoundedCornerShape(Radius.extraSmall), leadingIcon = leading, trailingIcon = trailing,
+        visualTransformation = visualTransformation,
     )
 }
 

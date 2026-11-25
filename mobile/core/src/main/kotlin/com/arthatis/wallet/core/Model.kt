@@ -45,6 +45,10 @@ data class Wallet(
     val icon: String? = null,
     /** `#RRGGBB`, null = theme primary. */
     val color: String? = null,
+    /** Credit cards only: the card limit, for information. Never part of any balance. */
+    val creditLimitMinor: Long? = null,
+    /** Credit cards only: bill due day of the month (1–31; past the month's end = its last day). */
+    val dueDay: Int? = null,
 ) : Syncable
 
 @Serializable
@@ -79,6 +83,8 @@ data class Tx(
     val recurringId: String? = null,
     override val updatedAt: Long,
     override val deletedAt: Long? = null,
+    /** Transfers only: fee taken from what the recipient gets, in the destination currency. [toAmountMinor] is already net of it. */
+    val feeMinor: Long? = null,
 ) : Syncable
 
 @Serializable

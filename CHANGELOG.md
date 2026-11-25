@@ -1,45 +1,56 @@
 # Changelog
 
-Versi mengikuti [SemVer](https://semver.org). Selama `0.0.x` ini adalah pra-rilis: belum di Play Store, belum diaudit, dan APK ditandatangani dengan kunci debug.
+Versions follow [SemVer](https://semver.org). During `0.0.x` everything is a pre-release: not on the Play Store, not audited, and the APKs are signed with a debug key.
 
-## [0.0.4] — pra-rilis
+## [0.0.5] — pre-release
 
-- **Semua mata uang 4 desimal** (USD/SGD/MYR/EUR juga, bukan hanya Rupiah). Tampilan non-IDR minimal 2 digit (`$5.00`, `$1,060.7925`). **Tidak kompatibel dengan data 0.0.3** untuk dompet non-IDR: hapus data HP dan server sebelum memasang.
-- **Total saldo = kekayaan bersih**: kas + investasi − utang kartu kredit, dengan rincian Kas · Investasi · Kartu kredit di bawahnya (HP dan web).
-- **Angka besar diringkas otomatis** (`Rp4,1k`, `$6.7m`, `Rp7,2b`) hanya bila nominal penuh tidak muat.
-- **Laporan keuangan PDF** dengan rentang tanggal (default 30 hari terakhir): ringkasan, per kategori, per dompet, daftar transaksi. HP: Data & backup → Laporan keuangan. Web: Laporan → Ekspor PDF.
-- **Transaksi otomatis dari email** bank & e-wallet (IMAP + app password, dibaca di HP, tiap ±15 menit). Hasilnya draf yang dikonfirmasi; email tidak lewat server.
-- Chat AI: boleh ngobrol dan konsultasi keuangan umum (tetap seputar catatan, konsultasi, dan analisa riwayat), mengingat percakapan, fakta riwayat 6 bulan dan saldo per dompet. **Transfer antar dompet lewat chat** diperbaiki ("tf 50k dari BCA ke OVO", "kirim 100rb ke GoPay", "top up GoPay 200k"), memakai kurs untuk beda mata uang.
-- **Scan struk tidak lagi macet**: kegagalan OCR kini tertangani, setiap mesin AI punya batas waktu (Gemini Nano bisa menunggu tanpa akhir saat modelnya belum siap), foto diperkecil dan diputar sesuai EXIF, ada tahap proses dan tombol Batal.
-- UI: ikon Transaksi di navigasi kini solid; palet warna dompet lebih cerah (kuning baru); 2 dompet di Beranda = saldo tertinggi; detail dompet memakai satu FAB (Tambah transaksi + Transfer); hapus dompet pindah ke bawah form Ubah dompet; konten tidak lagi terpotong di atas bilah navigasi.
+- **Opening balance is never income.** It is shown as its own line: in the report (opening balance → income → expenses → closing balance, plus an opening column per wallet) and on the wallet detail screen. Tests lock this rule in.
+- **Credit cards are debt, not assets.** The card form asks for the current bill (stored as debt), an optional limit (information only, shows the remaining limit) and an optional due date. Cards never appear among the top wallets on Home and are listed after cash and investments.
+- **Credit-card bill reminder** 3 days before and on the due date, only while the card has debt.
+- **Transfers:** convert by rate or by the amount received (the rate is derived when you only know both amounts); optional fee taken from what the recipient gets, on any transfer; transfer categories (create your own, pick one on the Transfer screen). Same on the web.
+- **Report:** transactions grouped by category with count and subtotal (PDF on the phone and the web).
+- **Receipt photo** (renamed from "receipt scan"): products are listed as items (ticked); tax, service, fees and rounding (add), discounts (subtract), and payment/change (usually not counted) are listed apart as optional lines. Tax and discounts are pre-ticked only when items + them equal the printed total; the total itself is never a line, only a check. Each amount is checked against the receipt text. "Split per item" takes discounts off the largest lines so no entry is negative.
+- **Email transactions:** the saved app password shows as filled (masked, with show/hide) and can be edited in place; providers Gmail/Outlook/Yahoo/iCloud lock the server and port, **Custom** unlocks them; watched senders are empty by default (with an example) and nothing is read until at least one sender is listed.
+- Amounts in transaction and wallet rows are right-aligned; the free space sits between the text and the amount. Cash wallets no longer repeat the currency code under their name.
+- Docs: README and CHANGELOG in English by default; Indonesian README in `README.id.md`.
 
-## [0.0.3] — pra-rilis
+## [0.0.4] — pre-release
 
-- **Rupiah bisa berdesimal** (sampai 4 digit, untuk kripto/valas). **Tidak kompatibel dengan data 0.0.1/0.0.2**: satuan simpan IDR berubah, jadi data lama harus dihapus (HP dan server) sebelum memasang. Tampilan `Rp14.125.000` tidak berubah untuk angka bulat.
-- Dompet bisa diubah (nama, ikon, warna, saldo awal); tipe dan mata uang terkunci.
-- Tipe dompet "Biasa" dinamai ulang menjadi **Tunai/Cash**.
-- Keypad: tombol desimal juga untuk Rupiah (tombol `k` tetap ada).
+- **Every currency has 4 decimals** (USD/SGD/MYR/EUR too, not only rupiah). Non-IDR amounts show at least 2 digits (`$5.00`, `$1,060.7925`). **Not compatible with 0.0.3 data** for non-IDR wallets: clear the phone and server data before installing.
+- **Total balance = net worth**: cash + investments − credit-card debt, with a Cash · Investments · Credit cards breakdown underneath (phone and web).
+- **Large amounts shorten automatically** (`Rp4,1k`, `$6.7m`, `Rp7,2b`) only when the full amount doesn't fit.
+- **Financial report as PDF** for a date range (default: the last 30 days): summary, by category, by wallet, transaction list. Phone: Data & backup → Financial report. Web: Reports → Export PDF.
+- **Automatic transactions from bank & e-wallet emails** (IMAP + app password, read on the phone every ~15 minutes). They become drafts you confirm; email never goes through the server.
+- AI chat: small talk and general money advice are fine (staying around recording, consultation and history analysis); it remembers the conversation and knows 6 months of history and each wallet's balance. **Transfers between wallets from chat** fixed ("tf 50k dari BCA ke OVO", "kirim 100rb ke GoPay", "top up GoPay 200k"), using the rate across currencies.
+- **Receipt scan no longer hangs**: OCR failures are handled, every AI engine has a time limit (Gemini Nano could wait forever while its model wasn't ready), the photo is downscaled and rotated per EXIF, and there are visible steps and a Cancel button.
+- UI: the Transactions nav icon is solid; brighter wallet colour palette (new yellow); the 2 wallets on Home are the highest balances; wallet detail uses one FAB (Add transaction + Transfer); delete wallet moved to the bottom of Edit wallet; content is no longer cut off above the navigation bar.
 
-## [0.0.2] — pra-rilis
+## [0.0.3] — pre-release
 
-- **APK jauh lebih ringan**: R8 (minify + shrink resource) aktif untuk rilis. Library ML Kit membawa ~15 MB native per CPU, jadi rilis dibagi satu APK per CPU (19–27 MB, dulu satu APK 83 MB). Semua CPU didukung:
-  - `arm64-v8a`: HP 64-bit (hampir semua HP sejak ~2017), 25 MB.
-  - `armeabi-v7a`: HP 32-bit lama, 19 MB.
-  - `x86_64` dan `x86`: emulator dan perangkat Intel/ChromeOS, 27 MB.
-- Berkas: aset GitHub Release `v0.0.2` (`arthatis-wallet-v0.0.2-<cpu>.apk` + `SHA256SUMS`).
+- **Rupiah can have decimals** (up to 4 digits, for crypto/forex). **Not compatible with 0.0.1/0.0.2 data**: the IDR storage unit changed, so old data must be cleared (phone and server) before installing. `Rp14.125.000` looks the same for whole amounts.
+- Wallets can be edited (name, icon, colour, opening balance); type and currency are locked.
+- The "Biasa" wallet type is renamed **Tunai/Cash**.
+- Keypad: a decimal key for rupiah too (the `k` key stays).
 
-- Input nominal memakai pemisah ribuan sesuai mata uang (IDR `1.234.567`, USD/SGD/MYR `1,234.56`, EUR `1.234,56`) saat mengetik; keypad transaksi punya tombol desimal untuk mata uang berdesimal (sebelumnya angka di belakang koma tidak bisa dimasukkan).
-- Mata uang baru: MYR (RM) dan EUR.
-- Dompet: jenis Rekening/Tunai/E-Wallet diganti pilihan ikon dan warna; tipe Biasa, Investasi, Kartu kredit (investasi dan utang kartu tampil terpisah dari total kas). Data lama tetap terbaca.
-- Layar tambah/ubah transaksi berulang di aplikasi dan web.
-- Status Gemini Nano di Pengaturan AI diperiksa dengan uji coba nyata, bukan hanya status unduhan, dan menampilkan detailnya.
+## [0.0.2] — pre-release
 
-## [0.0.1] — pra-rilis
+- **Much smaller APKs**: R8 (minify + resource shrinking) is on for release. ML Kit ships ~15 MB of native code per CPU, so releases are split into one APK per CPU (19–27 MB, previously one 83 MB APK). Every CPU is supported:
+  - `arm64-v8a`: 64-bit phones (almost every phone since ~2017), 25 MB.
+  - `armeabi-v7a`: old 32-bit phones, 19 MB.
+  - `x86_64` and `x86`: emulators and Intel/ChromeOS devices, 27 MB.
+- Files: GitHub Release `v0.0.2` assets (`arthatis-wallet-v0.0.2-<cpu>.apk` + `SHA256SUMS`).
+- Amount inputs use the currency's thousands separator while typing (IDR `1.234.567`, USD/SGD/MYR `1,234.56`, EUR `1.234,56`); the transaction keypad has a decimal key for currencies with decimals (previously decimals couldn't be entered).
+- New currencies: MYR (RM) and EUR.
+- Wallets: the Bank/Cash/E-wallet kinds are replaced by an icon and colour choice; types Regular, Investment, Credit card (investments and card debt shown apart from the cash total). Old data still reads.
+- Add/edit screens for recurring transactions in the app and on the web.
+- The Gemini Nano status in AI settings is checked with a real trial run, not only the download status, and shows its details.
 
-Pertama kali Arthatis Wallet v2 dapat dipasang.
+## [0.0.1] — pre-release
 
-- **Aplikasi Android**: onboarding tanpa akun, multi-dompet dan multi-mata uang (IDR/USD/SGD) dengan transfer dan kurs yang bisa diubah, transaksi dengan keypad, transaksi berulang, anggaran, kategori, scan struk (OCR di HP), Chat AI (Gemini Nano → AI server → API pribadi → parser lokal), ekspor/impor `.arthatis`/CSV/SQLite, Wallet Bareng, tautan sesi web lewat QR, bahasa ID/EN, tema terang/gelap.
-- **Server**: sinkron E2EE (XChaCha20-Poly1305, X25519 + ML-KEM-768), vault tanpa akun, email pemulihan opsional (SMTP), Bareng, admin API, aktivasi vault untuk hosted.
-- **Web mirror**: login QR, CRUD penuh, laporan, Chat AI, Bareng, halaman Admin.
-- Belum ada: iOS, billing, deep link undangan Android. Kriptografi belum diaudit pihak ketiga.
-- Berkas: aset GitHub Release `v0.0.1`.
+The first installable Arthatis Wallet v2.
+
+- **Android app**: account-free onboarding, multiple wallets and currencies (IDR/USD/SGD) with transfers and editable rates, keypad entry, recurring transactions, budgets, categories, receipt scan (on-device OCR), AI chat (Gemini Nano → server AI → your own API key → local parser), `.arthatis`/CSV/SQLite export/import, shared wallets (Bareng), web-session linking by QR, Indonesian/English, light/dark theme.
+- **Server**: E2EE sync (XChaCha20-Poly1305, X25519 + ML-KEM-768), account-free vaults, optional recovery email (SMTP), shared wallets, admin API, vault activation for hosting.
+- **Web mirror**: QR login, full CRUD, reports, AI chat, shared wallets, Admin page.
+- Not yet: iOS, billing, Android invite deep links. The cryptography has not been audited by a third party.
+- Files: GitHub Release `v0.0.1` assets.

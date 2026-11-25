@@ -233,9 +233,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // --- Ledger -------------------------------------------------------------------------------
 
-    fun saveWallet(name: String, kind: WalletKind, currency: String, openingMinor: Long, icon: String? = null, color: String? = null) {
+    fun saveWallet(name: String, kind: WalletKind, currency: String, openingMinor: Long, icon: String? = null, color: String? = null, creditLimitMinor: Long? = null, dueDay: Int? = null) {
         viewModelScope.launch {
-            repo.saveWallet(Wallet(newId(), name, kind, currency, openingMinor, repo.nextWalletPosition(), 0, icon = icon, color = color))
+            repo.saveWallet(Wallet(newId(), name, kind, currency, openingMinor, repo.nextWalletPosition(), 0, icon = icon, color = color, creditLimitMinor = creditLimitMinor, dueDay = dueDay))
             runSync()
         }
     }
@@ -248,8 +248,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun deleteWallet(w: Wallet) { viewModelScope.launch { repo.deleteWallet(w); runSync() } }
 
     /** Returns false when a needed rate is missing (the UI then asks for a manual rate). */
-    suspend fun transfer(from: Wallet, to: Wallet, amountMinor: Long, manualRate: BigDecimal?, note: String): Boolean {
-        val tx = buildTransfer(newId(), from, to, amountMinor, rates.value, manualRate, System.currentTimeMillis(), 0, note) ?: return false
+    suspend fun transfer(from: Wallet, to: Wallet, amountMinor: Long, manualRate: BigDecimal?, note: String, receivedMinor: Long? = null, feeMinor: Long = 0, categoryId: String? = null): Boolean {
+        val tx = buildTransfer(newId(), from, to, amountMinor, rates.value, manualRate, System.currentTimeMillis(), 0, note, receivedMinor, feeMinor,
+            categoryId ?: ledger.value.liveCategories.firstOrNull { it.key == "transfer" }?.id) ?: return false
         repo.saveTx(tx); runSync(); return true
     }
 
@@ -411,8 +412,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun testEmail(host: String, port: Int, user: String, password: String): String? =
         com.arthatis.wallet.email.Imap.test(host, port, user, password)
 
-    fun saveEmailSettings(enabled: Boolean, host: String, port: Int, user: String, password: String?, senders: List<String>) {
+    fun saveEmailSettings(enabled: Boolean, provider: String, host: String, port: Int, user: String, password: String?, senders: List<String>) {
         val changedAccount = host != prefs.emailHost || user != prefs.emailUser
+        prefs.emailProvider = provider
         prefs.emailHost = host; prefs.emailPort = port; prefs.emailUser = user; prefs.emailSenders = senders
         if (!password.isNullOrEmpty()) prefs.emailPassword = password
         if (changedAccount) { prefs.emailLastUid = 0; prefs.emailUidValidity = 0 }

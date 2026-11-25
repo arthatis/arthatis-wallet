@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
@@ -43,6 +44,7 @@ import com.arthatis.wallet.core.Wallet
 import com.arthatis.wallet.core.dayOf
 import com.arthatis.wallet.core.formatMinor
 import com.arthatis.wallet.core.formatCompact
+import com.arthatis.wallet.core.isCredit
 import com.arthatis.wallet.core.monthBounds
 import com.arthatis.wallet.core.periodFlow
 import com.arthatis.wallet.core.totalBalance
@@ -52,8 +54,20 @@ import com.arthatis.wallet.data.ServerMode
 import java.time.LocalDate
 import java.time.ZoneOffset
 
+/** Second line of a wallet card. The currency already shows in the amount, so cash wallets have none. */
 @Composable
-fun walletMeta(w: Wallet) = if (w.kind == com.arthatis.wallet.core.WalletKind.investasi || w.kind == com.arthatis.wallet.core.WalletKind.kartu) "${walletKindLabel(w.kind)} · ${w.currency}" else w.currency
+fun walletMeta(w: Wallet, ledger: Ledger? = null): String? = when (w.kind) {
+    com.arthatis.wallet.core.WalletKind.investasi -> walletKindLabel(w.kind)
+    com.arthatis.wallet.core.WalletKind.kartu -> {
+        val limit = w.creditLimitMinor?.takeIf { it > 0 }
+        if (limit == null || ledger == null) walletKindLabel(w.kind)
+        else {
+            val left = limit + walletBalance(w, ledger.txs).coerceAtMost(0)
+            "${walletKindLabel(w.kind)} · " + tr("sisa limit ${formatCompact(left, w.currency)}", "${formatCompact(left, w.currency)} limit left")
+        }
+    }
+    else -> null
+}
 
 @Composable
 fun lastUsed(w: Wallet, ledger: Ledger): String? {
@@ -165,7 +179,7 @@ fun HomeScreen(vm: AppViewModel) {
             }
             BalanceHero(
                 total = total?.let { formatMinor(it, currency) } ?: "—",
-                subtitle = if (total == null) tr("Kurs belum tersedia. Ketuk Pengaturan → Mata uang & kurs.", "Rates unavailable. Open Settings → Currency & rates.") else tr("${ledger.liveWallets.size} dompet · dalam $currency", "${ledger.liveWallets.size} wallets · in $currency") + (if (extras.isEmpty()) "" else "\n$extras"),
+                subtitle = if (total == null) tr("Kurs belum tersedia. Ketuk Pengaturan → Mata uang & kurs.", "Rates unavailable. Open Settings → Currency & rates.") else tr("${ledger.liveWallets.size} dompet · dalam $currency · Masuk/Keluar = transaksi bulan ini", "${ledger.liveWallets.size} wallets · in $currency · Income/Expense = this month's transactions") + (if (extras.isEmpty()) "" else "\n$extras"),
                 statusChip = chip,
                 incomeLabel = tr("Masuk", "Income"), income = flow?.let { formatMinor(it.incomeMinor, currency, Sign.Plus) } ?: "—",
                 expenseLabel = tr("Keluar", "Expense"), expense = flow?.let { formatMinor(it.expenseMinor, currency, Sign.Minus) } ?: "—",
@@ -192,7 +206,7 @@ fun HomeScreen(vm: AppViewModel) {
             actions = listOf(
                 DialAction(tr("Tambah manual", "Add manually"), Icons.Rounded.Edit) { vm.go(Route.AddTx()) },
                 DialAction("Chat AI", Icons.Rounded.AutoAwesome) { vm.go(Route.Chat) },
-                DialAction(tr("Scan struk", "Scan receipt"), Icons.Rounded.DocumentScanner) { vm.go(Route.Receipt) },
+                DialAction(tr("Foto struk", "Receipt photo"), Icons.Rounded.CameraAlt) { vm.go(Route.Receipt) },
             ),
             open = dialOpen, onOpenChange = { dialOpen = it }, modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = LocalPageBottom.current).padding(16.dp),
         )
@@ -202,7 +216,7 @@ fun HomeScreen(vm: AppViewModel) {
 @Composable
 private fun WalletGrid(wallets: List<Wallet>, ledger: Ledger, vm: AppViewModel, wide: Boolean) {
     val items: @Composable (Wallet) -> Unit = { w ->
-        WalletCard(w.name, walletMeta(w), lastUsed(w, ledger), formatMinor(walletBalance(w, ledger.txs), w.currency), walletIcon(w), tint = walletTint(w)) { vm.go(Route.WalletDetail(w.id)) }
+        WalletCard(w.name, walletMeta(w, ledger), lastUsed(w, ledger), formatMinor(walletBalance(w, ledger.txs), w.currency), walletIcon(w), tint = walletTint(w)) { vm.go(Route.WalletDetail(w.id)) }
     }
     if (wide) wallets.chunked(2).forEach { pair ->
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { pair.forEach { Column(Modifier.weight(1f)) { items(it) } }; if (pair.size == 1) Column(Modifier.weight(1f)) {} }
@@ -223,8 +237,9 @@ fun WalletsScreen(vm: AppViewModel) {
         TopBar(tr("Dompet", "Wallets"), actions = { AppIconButton(Icons.Rounded.Add, { vm.go(Route.AddWallet) }, description = tr("Tambah dompet", "Add wallet")) })
         Page(center = ledger.liveWallets.isEmpty()) {
             if (ledger.liveWallets.isEmpty()) EmptyState(Pose.Sleepy, tr("Belum ada dompet", "No wallets yet"), tr("Tambahkan dompet pertamamu.", "Add your first wallet."), action = tr("Tambah dompet", "Add wallet"), onAction = { vm.go(Route.AddWallet) })
-            ledger.liveWallets.forEach { w ->
-                WalletCard(w.name, walletMeta(w), lastUsed(w, ledger), formatMinor(walletBalance(w, ledger.txs), w.currency), walletIcon(w), tint = walletTint(w)) { vm.go(Route.WalletDetail(w.id)) }
+            // Cash and investments first; credit cards (debt, not an asset) at the end.
+            ledger.liveWallets.sortedBy { it.kind.isCredit }.forEach { w ->
+                WalletCard(w.name, walletMeta(w, ledger), lastUsed(w, ledger), formatMinor(walletBalance(w, ledger.txs), w.currency), walletIcon(w), tint = walletTint(w)) { vm.go(Route.WalletDetail(w.id)) }
             }
             if (ledger.liveWallets.size > 1) AppButton(tr("Transfer antar dompet", "Transfer between wallets"), { vm.go(Route.Transfer(null)) }, Modifier.fillMaxWidth(), style = BtnStyle.Tonal, icon = Icons.Rounded.SwapHoriz)
         }
@@ -261,7 +276,9 @@ fun WalletDetailScreen(vm: AppViewModel, id: String) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Hint(tr("Saldo ${wallet.name}", "${wallet.name} balance"))
                     FitAmount(formatMinor(walletBalance(wallet, ledger.txs), wallet.currency), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
-                    Hint(walletMeta(wallet))
+                    walletMeta(wallet, ledger)?.let { Hint(it) }
+                    // The opening balance is what the wallet held before tracking started: never income.
+                    if (wallet.openingMinor != 0L) Hint(if (wallet.kind.isCredit) tr("Tagihan awal ${formatMinor(-wallet.openingMinor, wallet.currency)} (bukan transaksi)", "Opening bill ${formatMinor(-wallet.openingMinor, wallet.currency)} (not a transaction)") else tr("Saldo awal ${formatMinor(wallet.openingMinor, wallet.currency)} (bukan pemasukan)", "Opening balance ${formatMinor(wallet.openingMinor, wallet.currency)} (not income)"))
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

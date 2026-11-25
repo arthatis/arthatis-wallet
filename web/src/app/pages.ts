@@ -28,14 +28,23 @@ export function txRow(tx: Tx, l: Ledger, edit = true): string {
   const cur = w?.currency ?? "IDR";
   const title = tx.note || (tx.kind === "transfer" ? t("Transfer", "Transfer") : catName(c));
   const to = tx.toWalletId ? l.wallets.find((x) => x.id === tx.toWalletId) : undefined;
-  const sub = tx.kind === "transfer" ? `${w?.name ?? "?"} → ${to?.name ?? "?"} · ${dateShort(tx.occurredAt)}` : `${catName(c)} · ${w?.name ?? "?"} · ${dateShort(tx.occurredAt)}`;
+  const fee = tx.feeMinor ? ` · fee ${formatMinor(tx.feeMinor, to?.currency ?? cur)}` : "";
+  const sub = tx.kind === "transfer" ? `${w?.name ?? "?"} → ${to?.name ?? "?"}${fee} · ${dateShort(tx.occurredAt)}` : `${catName(c)} · ${w?.name ?? "?"} · ${dateShort(tx.occurredAt)}`;
   return `<${edit ? `button data-act="edit-tx" data-id="${tx.id}"` : "div"} class="row"><span class="icon">${icon(iconFor(c))}</span><span class="texts"><b>${esc(title)}</b><span class="muted small">${esc(sub)}</span></span><span class="amount ${tx.kind === "income" ? "in" : ""}">${esc(formatMinor(tx.amountMinor, cur, sign(tx.kind)))}</span></${edit ? "button" : "div"}>`;
+}
+
+/** Cash/investment wallets by balance (in the main currency), highest first, then credit cards. Same as the phone. */
+function byBalance(ws: Wallet[], l: Ledger, currency: string, rates: Rates): Wallet[] {
+  const v = (w: Wallet) => { const b = balance(w, l.txs); return rates.convert(b, w.currency, currency) ?? b; };
+  return [...ws.filter((w) => w.kind !== "kartu").sort((a, b) => v(b) - v(a)), ...ws.filter((w) => w.kind === "kartu")];
 }
 
 function walletRow(w: Wallet, l: Ledger): string {
   const key = walletIconKey(w); const tint = w.color ? ` style="--wc:${esc(w.color)}"` : "";
-  const meta = typeOf(w.kind) === "biasa" ? w.currency : `${kindLabel(w.kind)} · ${w.currency}`;
-  return `<button class="row wallet" data-act="edit-wallet" data-id="${w.id}"><span class="icon${w.color ? " tinted" : ""}"${tint}>${icon(key === "wallet" ? "wallet" : "wi_" + key)}</span><span class="texts"><b>${esc(w.name)}</b><span class="muted small">${esc(meta)}</span></span><span class="amount">${amt(formatMinor(balance(w, l.txs), w.currency))}</span></button>`;
+  // The amount already shows the currency; cash wallets get no second line.
+  const left = w.kind === "kartu" && w.creditLimitMinor ? w.creditLimitMinor + Math.min(0, balance(w, l.txs)) : null;
+  const meta = typeOf(w.kind) === "biasa" ? "" : left !== null ? `${kindLabel(w.kind)} · ${t("sisa limit", "limit left")} ${formatCompact(left, w.currency)}` : kindLabel(w.kind);
+  return `<button class="row wallet" data-act="edit-wallet" data-id="${w.id}"><span class="icon${w.color ? " tinted" : ""}"${tint}>${icon(key === "wallet" ? "wallet" : "wi_" + key)}</span><span class="texts"><b>${esc(w.name)}</b>${meta ? `<span class="muted small">${esc(meta)}</span>` : ""}</span><span class="amount">${amt(formatMinor(balance(w, l.txs), w.currency))}</span></button>`;
 }
 
 /** Money that falls back to its compact form (`Rp4,1k`) when it does not fit; see fitAmounts() in ui.ts. */
@@ -74,7 +83,7 @@ export function dashboard(c: Ctx): string {
   </div>
   ${chartsBlock(c)}
   <div class="section-title">${t("Dompet", "Wallets")}<span class="grow"></span><button class="link" data-act="go" data-page="wallets">${t("Lihat semua", "See all")}</button></div>
-  <div class="grid cols-3">${wallets.slice(0, 3).map((w) => walletRow(w, l)).join("") || `<p class="muted">${t("Belum ada dompet.", "No wallets yet.")}</p>`}</div>
+  <div class="grid cols-3">${byBalance(wallets, l, currency, rates).slice(0, 3).map((w) => walletRow(w, l)).join("") || `<p class="muted">${t("Belum ada dompet.", "No wallets yet.")}</p>`}</div>
   <div class="section-title">${t("Transaksi terbaru", "Recent transactions")}<span class="grow"></span><button class="link" data-act="go" data-page="transactions">${t("Lihat semua", "See all")}</button></div>
   <div class="list">${live(l.txs).slice(0, 5).map((x) => txRow(x, l)).join("") || `<p class="muted">${t("Belum ada transaksi.", "No transactions yet.")}</p>`}</div>`;
 }
@@ -140,19 +149,29 @@ export async function transferDialog(c: Ctx) {
   const wallets = live(c.ledger.wallets);
   if (wallets.length < 2) { toast(t("Butuh minimal dua dompet.", "You need at least two wallets.")); return; }
   const opts: [string, string][] = wallets.map((w) => [w.id, `${w.name} · ${w.currency}`]);
-  const f = await dialog(t("Transfer antar dompet", "Transfer between wallets"), `${select("from", t("Dari", "From"), opts, wallets[0]!.id)}${select("to", t("Ke", "To"), opts, wallets[1]!.id)}${field("amount", t("Nominal", "Amount"), "", { required: true, amount: wallets[0]!.currency })}${field("rate", t("Kurs (opsional)", "Rate (optional)"), "", { hint: t("Untuk beda mata uang. Kosong = kurs API.", "For different currencies. Empty = API rate.") })}`, t("Transfer", "Transfer"));
+  const cats = live(c.ledger.categories).filter((k) => !k.hidden && k.kind === "transfer");
+  const f = await dialog(t("Transfer antar dompet", "Transfer between wallets"), `${select("from", t("Dari", "From"), opts, wallets[0]!.id)}${select("to", t("Ke", "To"), opts, wallets[1]!.id)}${field("amount", t("Nominal dikirim", "Amount sent"), "", { required: true, amount: wallets[0]!.currency })}
+    ${field("rate", t("Kurs (opsional)", "Rate (optional)"), "", { hint: t("Untuk beda mata uang. Kosong = kurs API.", "For different currencies. Empty = API rate.") })}
+    ${field("received", t("Nominal diterima sebelum fee (opsional)", "Amount received before fee (optional)"), "", { hint: t("Beda mata uang: isi ini bila kamu tahu nominal sebelum dan sesudah tanpa tahu kurs; kursnya dihitung otomatis.", "Different currencies: fill this when you know both amounts but not the rate; the rate is derived.") })}
+    ${field("fee", t("Fee (opsional)", "Fee (optional)"), "", { hint: t("Dalam mata uang dompet tujuan, dipotong dari yang diterima. Kosongkan bila gratis.", "In the destination wallet's currency, taken from what it receives. Leave empty if free.") })}
+    ${cats.length ? select("category", t("Kategori", "Category"), cats.map((k) => [k.id, catName(k)]), cats.find((k) => k.key === "transfer")?.id ?? cats[0]!.id) : ""}`, t("Transfer", "Transfer"));
   if (!f) return;
   const from = wallets.find((w) => w.id === f.get("from")), to = wallets.find((w) => w.id === f.get("to"));
   const v = from ? evaluateAmount(String(f.get("amount") ?? ""), from.currency) : null; const manual = evaluate(String(f.get("rate") ?? "").replace(/,/g, "."));
   if (!from || !to || v === null) return;
-  const tx = buildTransfer(from, to, toMinor(v, from.currency), c.rates, manual, Date.now());
-  if (!tx) { toast(t("Transfer gagal: periksa dompet dan kurs.", "Transfer failed: check wallets and rate.")); return; }
+  const received = from.currency !== to.currency ? evaluateAmount(String(f.get("received") ?? ""), to.currency) : null;
+  const fee = evaluateAmount(String(f.get("fee") ?? ""), to.currency);
+  const tx = buildTransfer(from, to, toMinor(v, from.currency), c.rates, received ? null : manual, Date.now(), {
+    receivedMinor: received ? toMinor(received, to.currency) : null, feeMinor: fee ? toMinor(fee, to.currency) : 0, categoryId: String(f.get("category") ?? "") || null,
+  });
+  if (!tx) { toast(t("Transfer gagal: periksa dompet, kurs, dan fee.", "Transfer failed: check wallets, rate and fee.")); return; }
   session.put(ENTITY.tx, tx); toast(t("Transfer disimpan.", "Transfer saved."));
 }
 
 // --- Wallets ------------------------------------------------------------------------------------
 export function wallets(c: Ctx): string {
-  const ws = live(c.ledger.wallets);
+  // Cash and investments first; credit cards (debt, not an asset) last.
+  const ws = [...live(c.ledger.wallets)].sort((a, b) => Number(a.kind === "kartu") - Number(b.kind === "kartu"));
   return `<div style="display:flex;gap:8px"><button class="btn" data-act="add-wallet">${icon("add")}${t("Tambah dompet", "Add wallet")}</button><button class="btn tonal" data-act="transfer">${icon("swap")}${t("Transfer", "Transfer")}</button></div>
   <div class="grid cols-2">${ws.map((w) => `<div style="display:flex;gap:8px;align-items:center">${walletRow(w, c.ledger)}<button class="btn text danger sm" data-act="del-wallet" data-id="${w.id}" aria-label="${t("Hapus", "Delete")}">${icon("del")}</button></div>`).join("") || `<p class="muted">${t("Belum ada dompet.", "No wallets yet.")}</p>`}</div>
   <p class="muted small">${t("Mata uang dompet tidak bisa diubah setelah dibuat.", "A wallet's currency can't be changed after it's created.")}</p>`;
@@ -169,13 +188,18 @@ export async function walletDialog(c: Ctx, existing?: Wallet) {
     <p class="muted small">${existing ? t("Tipe dan mata uang tidak bisa diubah setelah dompet dibuat.", "Type and currency can't be changed once the wallet is created.") : t("Kartu kredit: saldo boleh minus; utangnya mengurangi total saldo. Investasi: ikut total saldo, tampil terpisah di rincian.", "Credit card: balance may go negative; the debt reduces the total balance. Investment: part of the total, shown apart in the breakdown.")}</p>
     ${pickers(existing ? walletIconKey(existing) : "wallet", existing?.color ?? "")}
     ${existing ? `<div class="field"><label>${t("Mata uang", "Currency")}</label><input value="${existing.currency}" disabled></div>` : select("currency", t("Mata uang", "Currency"), CURRENCIES.map((x) => [x.code, `${x.code} ${x.symbol}`]), c.currency)}
-    ${field("opening", t("Saldo awal (opsional)", "Opening balance (optional)"), existing ? amountText(existing.openingMinor, existing.currency) : "", { amount: existing?.currency ?? c.currency })}
+    ${field("opening", t("Saldo awal / tagihan kartu saat ini (opsional)", "Opening balance / current card bill (optional)"), existing ? amountText(Math.abs(existing.openingMinor), existing.currency) : "", { amount: existing?.currency ?? c.currency, hint: t("Uang yang sudah ada sebelum mulai mencatat; bukan pemasukan. Untuk kartu kredit: utang yang sudah ada.", "Money already there before tracking; not income. For a credit card: the debt it already has.") })}
+    ${!existing || existing.kind === "kartu" ? `${field("limit", t("Limit kartu (opsional, hanya kartu kredit)", "Card limit (optional, credit cards only)"), existing?.creditLimitMinor ? amountText(existing.creditLimitMinor, existing.currency) : "", { amount: existing?.currency ?? c.currency, hint: t("Hanya info sisa limit; tidak pernah dihitung sebagai saldo.", "Only for the remaining limit; never a balance.") })}
+    ${field("due", t("Tanggal jatuh tempo (1–31, hanya kartu kredit)", "Due date (1–31, credit cards only)"), existing?.dueDay ? String(existing.dueDay) : "", { hint: t("Pengingat bayar muncul di HP H-3 dan pada harinya bila ada utang.", "The phone reminds you 3 days before and on the day while there is debt.") })}` : ""}
 `;
   const f = await dialog(existing ? t("Ubah dompet", "Edit wallet") : t("Tambah dompet", "Add wallet"), body);
   if (!f) return;
   const currency = existing?.currency ?? String(f.get("currency"));
-  const opening = toMinor(evaluateAmount(String(f.get("opening") ?? ""), currency) ?? 0, currency);
-  session.put(ENTITY.wallet, { ...(existing ?? { id: newId(), position: live(c.ledger.wallets).length, deletedAt: null, updatedAt: 0 }), name: String(f.get("name")).trim(), kind: existing ? existing.kind : (String(f.get("kind")) as WalletKind), icon: String(f.get("icon") ?? "wallet"), color: String(f.get("color") ?? "") || null, currency, openingMinor: opening });
+  const kind = existing ? existing.kind : (String(f.get("kind")) as WalletKind); const card = kind === "kartu";
+  const entered = Math.abs(toMinor(evaluateAmount(String(f.get("opening") ?? ""), currency) ?? 0, currency));
+  const limit = card ? toMinor(evaluateAmount(String(f.get("limit") ?? ""), currency) ?? 0, currency) || null : null;
+  const dueRaw = parseInt(String(f.get("due") ?? ""), 10); const dueDay = card && dueRaw >= 1 && dueRaw <= 31 ? dueRaw : null;
+  session.put(ENTITY.wallet, { ...(existing ?? { id: newId(), position: live(c.ledger.wallets).length, deletedAt: null, updatedAt: 0 }), name: String(f.get("name")).trim(), kind, icon: String(f.get("icon") ?? "wallet"), color: String(f.get("color") ?? "") || null, currency, openingMinor: card ? -entered : entered, creditLimitMinor: limit, dueDay });
   toast(t("Dompet disimpan.", "Wallet saved."));
 }
 

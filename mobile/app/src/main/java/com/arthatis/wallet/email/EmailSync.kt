@@ -110,6 +110,8 @@ object Imap {
      */
     suspend fun fetchNew(prefs: Prefs, firstRunDays: Int = 3, max: Int = 50): List<MailItem> = withContext(Dispatchers.IO) {
         val password = prefs.emailPassword ?: return@withContext emptyList()
+        // No watched sender = nothing to read (privacy: the inbox is never scanned wholesale).
+        if (prefs.emailSenders.isEmpty()) return@withContext emptyList()
         val store = session(prefs.emailHost, prefs.emailPort).getStore("imaps")
         store.connect(prefs.emailHost, prefs.emailPort, prefs.emailUser, password)
         try {
@@ -164,7 +166,7 @@ class EmailWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
     override suspend fun doWork(): Result {
         val graph = (applicationContext as WalletApplication).graph
         val prefs = graph.prefs
-        if (!prefs.emailEnabled || prefs.emailPassword == null || prefs.emailUser.isBlank()) return Result.success()
+        if (!prefs.emailEnabled || prefs.emailPassword == null || prefs.emailUser.isBlank() || prefs.emailSenders.isEmpty()) return Result.success()
         val count = runCatching { EmailSyncer.run(applicationContext) }.getOrElse {
             prefs.emailLastError = it.message ?: it.javaClass.simpleName
             return Result.retry()

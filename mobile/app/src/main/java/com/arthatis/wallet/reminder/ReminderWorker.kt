@@ -46,6 +46,23 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 .setContentIntent(intent).setAutoCancel(true).build()
             runCatching { manager.notify(r.id.hashCode(), note) }
         }
+        // Credit-card bills: 3 days before and on the due date, only while the card is in debt.
+        val en = com.arthatis.wallet.data.Prefs(applicationContext).language == "en"
+        ledger.liveWallets.filter { it.kind == com.arthatis.wallet.core.WalletKind.kartu && it.dueDay != null }.forEach { card ->
+            val days = com.arthatis.wallet.core.cardReminderDays(card.dueDay!!, today) ?: return@forEach
+            val debt = -com.arthatis.wallet.core.walletBalance(card, ledger.txs)
+            if (debt <= 0) return@forEach
+            val due = com.arthatis.wallet.core.nextDueDate(card.dueDay!!, today)
+            val date = java.time.format.DateTimeFormatter.ofPattern("d MMM", if (en) java.util.Locale.ENGLISH else java.util.Locale.forLanguageTag("id")).format(due)
+            val intent = PendingIntent.getActivity(applicationContext, ("card" + card.id).hashCode(), Intent(applicationContext, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+            val title = if (en) "${card.name} bill" else "Tagihan ${card.name}"
+            val text = if (days == 0) (if (en) "Due today · ${formatMinor(debt, card.currency)}" else "Jatuh tempo hari ini · ${formatMinor(debt, card.currency)}")
+                else (if (en) "Due $date (in 3 days) · ${formatMinor(debt, card.currency)}" else "Jatuh tempo $date (3 hari lagi) · ${formatMinor(debt, card.currency)}")
+            val note = NotificationCompat.Builder(applicationContext, "reminders")
+                .setSmallIcon(R.drawable.ic_launcher_foreground).setContentTitle(title).setContentText(text)
+                .setContentIntent(intent).setAutoCancel(true).build()
+            runCatching { manager.notify(("card" + card.id).hashCode(), note) }
+        }
         return Result.success()
     }
 }
